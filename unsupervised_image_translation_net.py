@@ -2,7 +2,6 @@ import os
 import tensorflow as tf
 import numpy as np
 import cv2
-from net_components import *
 from tensorflow.examples.tutorials.mnist import input_data
 
 
@@ -10,6 +9,7 @@ class Image_translation_net(object):
     def __init__(self, batch_size, z_dim):
         self.BS = batch_size
         self.z_dim = z_dim
+        self.L0, self.L1, self.L2, self.L3, self.L4 = 10, 0.1, 100, 0.1, 100
 
 
     def _get_random_vector(self, mu=None, sigma=None): #mu:[z_dim], #sigma:[z_dim]
@@ -23,7 +23,7 @@ class Image_translation_net(object):
         return input_data.read_data_sets('MNIST_data', one_hot=True)
 
 
-    def _encoder_pre_part(self, X, name, reuse=True):
+    def _encoder_pre(self, X, name, reuse=True):
         with tf.name_scope(name), tf.variable_scope(name, reuse=reuse):
             # conv1  #[BS,32,32,3]->[BS,16,16,64]
             W_conv1 = tf.get_variable('W_conv1', [5, 5, 3, 64], initializer=tf.contrib.layers.xavier_initializer_conv2d())
@@ -39,7 +39,7 @@ class Image_translation_net(object):
             return a_conv1
 
 
-    def _encoder_shared(self, X_pred, name, reuse=True):
+    def _encoder_S(self, X_pred, name, reuse=True):
         with tf.name_scope(name), tf.variable_scope(name, reuse=reuse):
             # conv2  #[BS,16,16,64]->[BS,8,8,128]
             W_conv2 = tf.get_variable('W_conv2', [5, 5, 64, 128],initializer=tf.contrib.layers.xavier_initializer_conv2d())
@@ -101,7 +101,7 @@ class Image_translation_net(object):
             return mean, stddev # [bs, z_dim],#[bs, z_dim]
 
 
-    def _generator_shared(self, z, name, reuse=True):
+    def _generator_S(self, z, name, reuse=True):
         with tf.name_scope(name), tf.variable_scope(name, reuse=reuse):
             # defc  # [BS,vec_size]->[BS,4*4*512]
             W_defc = tf.get_variable('W_defc', [z.shape[1].value, 4 * 4 * 1024], initializer=tf.truncated_normal_initializer(stddev=0.02))
@@ -147,7 +147,7 @@ class Image_translation_net(object):
         return a_deconv3
 
 
-    def _generator_end_part(self, recon_X_shared, name, reuse=True):
+    def _generator_end(self, recon_X_shared, name, reuse=True):
         with tf.name_scope(name), tf.variable_scope(name, reuse=reuse):
             # deconv4  # [BS,32,32,128]->[BS,64,64,64]
             W_deconv4 = tf.get_variable('W_deconv4', [5, 5, 64, 128], initializer=tf.truncated_normal_initializer(stddev=0.02))
@@ -168,7 +168,7 @@ class Image_translation_net(object):
             return self.a_deconv5
 
 
-    def _discriminator_pre_part(self, recon_X, name, reuse=True):
+    def _discriminator_pre(self, recon_X, name, reuse=True):
         with tf.name_scope(name), tf.variable_scope(name, reuse=reuse):
             # conv1  #[BS,128,128,3]->[BS,64,64,64]
             W_conv1 = tf.get_variable('W_conv1', [5, 5, 3, 64], initializer=tf.truncated_normal_initializer(stddev=0.02))
@@ -183,7 +183,7 @@ class Image_translation_net(object):
             return a_conv1
 
 
-    def _discriminator_shared(self, im_pred, name, reuse=True):
+    def _discriminator_S(self, im_pred, name, reuse=True):
         with tf.name_scope(name), tf.variable_scope(name, reuse=reuse):
             # conv2  #[BS,64,64,64]->[BS,32,32,128]
             W_conv2 = tf.get_variable('W_conv2', [5, 5, 64, 128], initializer=tf.truncated_normal_initializer(stddev=0.02))
@@ -229,65 +229,77 @@ class Image_translation_net(object):
 
     def build_graph(self):
         # placeholder
-        self.X_A = tf.placeholder(tf.float32, [self.BS, 28, 28 ,3], name='real_images') #[BS,W,H,C]
-        self.X_B = tf.placeholder(tf.float32, [self.BS, 28, 28 ,3], name='real_images') #[BS,W,H,C]
+        self.XA = tf.placeholder(tf.float32, [self.BS, 28, 28 ,3]) #[BS,W,H,C]
+        self.XB = tf.placeholder(tf.float32, [self.BS, 28, 28 ,3]) #[BS,W,H,C]
         # net
-        a_conv1_A = self._encoder_pre_part(self.X_A, 'encoder_A_part')
-        a_conv1_B = self._encoder_pre_part(self.X_B, 'encoder_B_part')
+        pre_msA = self._encoder_pre(self.XA, 'encoder_A')
+        pre_msB = self._encoder_pre(self.XB, 'encoder_B')
 
-        self.mu_A, self.sigma_A = self._encoder_shared(a_conv1_A, 'encoder_shared') # [bs,z_dim],#[bs,z_dim]
-        self.mu_B, self.sigma_B = self._encoder_shared(a_conv1_B, 'encoder_shared') # [bs,z_dim],#[bs,z_dim]
+        self.muA, self.sigmaA = self._encoder_S(pre_msA, 'encoder_S') # [bs,z_dim],#[bs,z_dim]
+        self.muB, self.sigmaB = self._encoder_S(pre_msB, 'encoder_S') # [bs,z_dim],#[bs,z_dim]
 
-        self.z_A = self.mu_A + self.sigma_A * tf.random_normal(tf.shape(self.mu_A), 0, 1, dtype=tf.float32)  # [bs,z_dim]
-        self.z_B = self.mu_B + self.sigma_B * tf.random_normal(tf.shape(self.mu_B), 0, 1, dtype=tf.float32)  # [bs,z_dim]
+        self.zA = self.muA + self.sigmaA * tf.random_normal(tf.shape(self.muA), 0, 1, dtype=tf.float32)  # [bs,z_dim]
+        self.zB = self.muB + self.sigmaB * tf.random_normal(tf.shape(self.muB), 0, 1, dtype=tf.float32)  # [bs,z_dim]
 
-        shared_recon_X_A = self._generator_shared(self.z_A, 'generator_shared')
-        shared_recon_X_B = self._generator_shared(self.z_B, 'generator_shared')
+        sR_A = self._generator_S(self.zA, 'generator_S')
+        sR_B = self._generator_S(self.zB, 'generator_S')
 
-        self.recon_X_AbyA = self._generator_end_part(shared_recon_X_A, 'generator_A_part')
-        self.recon_X_BbyB = self._generator_end_part(shared_recon_X_B, 'generator_B_part')
+        self.RA_A = self._generator_end(sR_A, 'generator_A')
+        self.RA_B = self._generator_end(sR_B, 'generator_A')
 
-        self.recon_X_BbyA = self._generator_end_part(shared_recon_X_A, 'generator_B_part')
-        self.recon_X_AbyB = self._generator_end_part(shared_recon_X_B, 'generator_A_part')
+        self.RB_B = self._generator_end(sR_B, 'generator_B')
+        self.RB_A = self._generator_end(sR_A, 'generator_B')
 
-        real_logits_A = self._discriminator_pre_part(self.recon_X_AbyA, 'discriminator_A_part')
-        fake_logits_A = self._discriminator_pre_part(self.recon_X_AbyB, 'discriminator_A_part')
+        pre_yA_A = self._discriminator_pre(self.RA_A, 'discriminator_A')
+        pre_yA_B = self._discriminator_pre(self.RA_B, 'discriminator_A')
+        yA_A = self._discriminator_S(pre_yA_A, 'discriminator_S')
+        yA_B = self._discriminator_S(pre_yA_B, 'discriminator_S')
 
-        real_logits_B = self._discriminator_pre_part(self.recon_X_BbyB, 'discriminator_B_part')
-        fake_logits_B = self._discriminator_pre_part(self.recon_X_BbyA, 'discriminator_B_part')
+        pre_yB_B = self._discriminator_pre(self.RB_B, 'discriminator_B')
+        pre_yB_A = self._discriminator_pre(self.RB_A, 'discriminator_B')
+        yB_B = self._discriminator_S(pre_yB_B, 'discriminator_S')
+        yB_A = self._discriminator_S(pre_yB_A, 'discriminator_S')
 
         #cycle_net
+        XC = self.RA_B
+        XD = self.RB_A
 
-        a_conv1_AbyB = self._encoder_pre_part(self.recon_X_AbyB, 'encoder_A_part')
-        a_conv1_BbyA = self._encoder_pre_part(self.recon_X_BbyA, 'encoder_B_part')
+        pre_msC= self._encoder_pre(XC, 'encoder_A')
+        pre_msD = self._encoder_pre(XD, 'encoder_B')
 
-        self.mu_AbyB, self.sigma_AbyB = self._encoder_shared(a_conv1_AbyB, 'encoder_shared') # [bs,z_dim],#[bs,z_dim]
-        self.mu_BbyA, self.sigma_BbyA = self._encoder_shared(a_conv1_BbyA, 'encoder_shared') # [bs,z_dim],#[bs,z_dim]
+        self.muC, self.sigmaC = self._encoder_S(pre_msC, 'encoder_S') # [bs,z_dim],#[bs,z_dim]
+        self.muD, self.sigmaD = self._encoder_S(pre_msD, 'encoder_S') # [bs,z_dim],#[bs,z_dim]
 
-        self.z_AbyB = self.mu_AbyB + self.sigma_AbyB * tf.random_normal(tf.shape(self.mu_AbyB), 0, 1, dtype=tf.float32)  # [bs,z_dim]
-        self.z_BbyA = self.mu_BbyA + self.sigma_BbyA * tf.random_normal(tf.shape(self.mu_BbyA), 0, 1, dtype=tf.float32)  # [bs,z_dim]
+        self.zC = self.muC + self.sigmaC * tf.random_normal(tf.shape(self.muC), 0, 1, dtype=tf.float32)  # [bs,z_dim]
+        self.zD = self.muD + self.sigmaD * tf.random_normal(tf.shape(self.muD), 0, 1, dtype=tf.float32)  # [bs,z_dim]
+
+        sR_C = self._generator_S(self.zC, 'generator_S')
+        sR_D = self._generator_S(self.zD, 'generator_S')
+
+        self.R_C = self._generator_end(sR_C, 'generator_A')
+        self.R_D = self._generator_end(sR_D, 'generator_B')
 
         #VAE_loss
-        IO_loss_A = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.recon_X_AbyA, labels=self.X_A),[1, 2, 3])# [bs,w,h,c]->[bs,1]
-        IO_loss_B = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.recon_X_BbyB, labels=self.X_B),[1, 2, 3])# [bs,w,h,c]->[bs,1]
-        self.IO_loss = tf.reduce_mean(IO_loss_A + IO_loss_B)
+        KL_loss_A = 0.5 * tf.reduce_sum(tf.square(self.muA) + tf.square(self.sigmaA) - tf.log(1e-8 + tf.square(self.sigmaA)) - 1, [1])# [bs,z_dim]->[bs,1]
+        KL_loss_B = 0.5 * tf.reduce_sum(tf.square(self.muB) + tf.square(self.sigmaB) - tf.log(1e-8 + tf.square(self.sigmaB)) - 1, [1])# [bs,z_dim]->[bs,1]
+        VAE_KL_loss = tf.reduce_mean(KL_loss_A + KL_loss_B)
 
-        KL_loss_A = 0.5 * tf.reduce_sum(tf.square(self.mu_A) + tf.square(self.sigma_A) - tf.log(1e-8 + tf.square(self.sigma_A)) - 1,[1])# [bs,z_dim]->[bs,1]
-        KL_loss_B = 0.5 * tf.reduce_sum(tf.square(self.mu_B) + tf.square(self.sigma_B) - tf.log(1e-8 + tf.square(self.sigma_B)) - 1,[1])# [bs,z_dim]->[bs,1]
-        self.KL_loss = tf.reduce_mean(KL_loss_A + KL_loss_B)
+        IO_loss_A = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.RA_A, labels=self.XA), [1, 2, 3])# [bs,w,h,c]->[bs,1]
+        IO_loss_B = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.RB_B, labels=self.XB), [1, 2, 3])# [bs,w,h,c]->[bs,1]
+        VAE_IO_loss = tf.reduce_mean(IO_loss_A + IO_loss_B)
 
-        self.VAE_loss = self.IO_loss + self.KL_loss
+        self.VAE_loss = self.L1 * VAE_KL_loss + self.L2 * VAE_IO_loss
 
         #GAN_loss
-        d_loss_real_A = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=real_logits_A, labels=tf.ones_like(real_logits_A)))
-        d_loss_fake_A = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=fake_logits_A, labels=tf.zeros_like(fake_logits_A)))
-        self.d_loss_A = d_loss_real_A + d_loss_fake_A  # [1]
+        GAN_lossA_A = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=yA_A, labels=tf.ones_like(yA_A))) #real
+        GAN_lossA_B = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=yA_B, labels=tf.zeros_like(yA_B))) #fake
+        GAN_lossA = GAN_lossA_A + GAN_lossA_B  # [1]
 
-        d_loss_real_B = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=real_logits_B, labels=tf.ones_like(real_logits_B)))
-        d_loss_fake_B = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=fake_logits_B, labels=tf.zeros_like(fake_logits_B)))
-        self.d_loss_B = d_loss_real_B + d_loss_fake_B  # [1]
+        GAN_lossB_B = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=yB_B, labels=tf.ones_like(yB_B))) #real
+        GAN_lossB_A = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=yB_A, labels=tf.zeros_like(yB_A))) #fake
+        GAN_lossB = GAN_lossB_B + GAN_lossB_A  # [1]
 
-        self.GAN_loss = self.d_loss_A + self.d_loss_B
+        self.GAN_loss = GAN_lossA + GAN_lossB
 
         # Cycle_loss
 
