@@ -228,7 +228,7 @@ class Image_translation_net(object):
     def build_graph(self):
         # placeholder
         self.XA = tf.placeholder(tf.float32, [self.BS, 28, 28 ,3]) #[BS,W,H,C]
-        self.XB = tf.placeholder(tf.float32, [self.BS, 28, 28 ,3]) #[BS,W,H,C]
+        self.XmuB = tf.placeholder(tf.float32, [self.BS, 28, 28 ,3]) #[BS,W,H,C]
         # net
         pre_msA = self._encoder_pre(self.XA, 'encoder_A')
         pre_msB = self._encoder_pre(self.XB, 'encoder_B')
