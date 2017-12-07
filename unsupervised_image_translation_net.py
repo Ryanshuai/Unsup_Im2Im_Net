@@ -118,7 +118,7 @@ class Image_translation_net(object):
 
             # deconv1  # [BS,4,4,1024]->[BS,8,8,512]
             W_deconv1 = tf.get_variable('W_deconv1', [5, 5, 512, 1024], initializer=tf.truncated_normal_initializer(stddev=0.02))
-            z_deconv1 = tf.nn.conv2d_transpose(a_deconv0, W_deconv1, [self._BS, 8, 8, 512], [1, 2, 2, 1])
+            z_deconv1 = tf.nn.conv2d_transpose(a_deconv0, W_deconv1, [self.BS, 8, 8, 512], [1, 2, 2, 1])
             mean_deconv1, variance_deconv1 = tf.nn.moments(z_deconv1, axes=[0, 1, 2])
             offset_deconv1 = tf.get_variable('offset_deconv1', initializer=tf.zeros([512]))
             scale_deconv1 = tf.get_variable('scale_deconv1', initializer=tf.ones([512]))
@@ -127,7 +127,7 @@ class Image_translation_net(object):
 
             # deconv2  # [BS,8,8,512]->[BS,16,16,256]
             W_deconv2 = tf.get_variable('W_deconv2', [5, 5, 256, 512], initializer=tf.truncated_normal_initializer(stddev=0.02))
-            z_deconv2 = tf.nn.conv2d_transpose(a_deconv1, W_deconv2, [self._BS, 16, 16, 256], [1, 2, 2, 1])
+            z_deconv2 = tf.nn.conv2d_transpose(a_deconv1, W_deconv2, [self.BS, 16, 16, 256], [1, 2, 2, 1])
             mean_deconv2, variance_deconv2 = tf.nn.moments(z_deconv2, axes=[0, 1, 2])
             offset_deconv2 = tf.get_variable('offset_deconv2', initializer=tf.zeros([256]))
             scale_deconv2 = tf.get_variable('scale_deconv2', initializer=tf.ones([256]))
@@ -136,7 +136,7 @@ class Image_translation_net(object):
 
             # deconv3  # [BS,16,16,256]->[BS,32,32,128]
             W_deconv3 = tf.get_variable('W_deconv3', [5, 5, 128, 256], initializer=tf.truncated_normal_initializer(stddev=0.02))
-            z_deconv3 = tf.nn.conv2d_transpose(a_deconv2, W_deconv3, [self._BS, 32, 32, 128], [1, 2, 2, 1])
+            z_deconv3 = tf.nn.conv2d_transpose(a_deconv2, W_deconv3, [self.BS, 32, 32, 128], [1, 2, 2, 1])
             mean_deconv3, variance_deconv3 = tf.nn.moments(z_deconv3, axes=[0, 1, 2])
             offset_deconv3 = tf.get_variable('offset_deconv3', initializer=tf.zeros([128]))
             scale_deconv3 = tf.get_variable('scale_deconv3', initializer=tf.ones([128]))
@@ -151,21 +151,19 @@ class Image_translation_net(object):
         with tf.name_scope(name), tf.variable_scope(name, reuse=reuse):
             # deconv4  # [BS,32,32,128]->[BS,64,64,64]
             W_deconv4 = tf.get_variable('W_deconv4', [5, 5, 64, 128], initializer=tf.truncated_normal_initializer(stddev=0.02))
-            z_deconv4 = tf.nn.conv2d_transpose(recon_X_shared, W_deconv4, [self._BS, 64, 64, 64], [1, 2, 2, 1])
+            z_deconv4 = tf.nn.conv2d_transpose(recon_X_shared, W_deconv4, [self.BS, 64, 64, 64], [1, 2, 2, 1])
             mean_deconv4, variance_deconv4 = tf.nn.moments(z_deconv4, axes=[0, 1, 2])
             offset_deconv4 = tf.get_variable('offset_deconv4', initializer=tf.zeros([64]))
             scale_deconv4 = tf.get_variable('scale_deconv4', initializer=tf.ones([64]))
-            bn_deconv4 = tf.nn.batch_normalization(z_deconv4, mean_deconv4, variance_deconv4, offset_deconv4, scale_deconv4,
-                                                   1e-5)
+            bn_deconv4 = tf.nn.batch_normalization(z_deconv4, mean_deconv4, variance_deconv4, offset_deconv4, scale_deconv4,1e-5)
             a_deconv4 = tf.nn.relu(bn_deconv4)
 
             # deconv5  # [BS,64,64,64]->[BS,128,128,3]
             W_deconv5 = tf.get_variable('W_deconv5', [5, 5, 3, 64], initializer=tf.truncated_normal_initializer(stddev=0.02))
-            z_deconv5 = tf.nn.conv2d_transpose(a_deconv4, W_deconv5, [self._BS, 128, 128, 3], [1, 2, 2, 1])
-            self.a_deconv5 = tf.nn.tanh(z_deconv5)
+            z_deconv5 = tf.nn.conv2d_transpose(a_deconv4, W_deconv5, [self.BS, 128, 128, 3], [1, 2, 2, 1])
 
             self.g_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=name)
-            return self.a_deconv5
+            return z_deconv5
 
 
     def _discriminator_pre(self, recon_X, name, reuse=True):
@@ -261,11 +259,11 @@ class Image_translation_net(object):
         yB_A = self._discriminator_S(pre_yB_A, 'discriminator_S') #[BS,1]
 
         #cycle_net
-        XC = self.RA_B
-        XD = self.RB_A
+        XC = self.RB_A
+        XD = self.RA_B
 
-        pre_msC= self._encoder_pre(XC, 'encoder_A')
-        pre_msD = self._encoder_pre(XD, 'encoder_B')
+        pre_msC= self._encoder_pre(XC, 'encoder_B')
+        pre_msD = self._encoder_pre(XD, 'encoder_A')
 
         self.muC, self.sigmaC = self._encoder_S(pre_msC, 'encoder_S') # [BS,z_dim],#[BS,z_dim]
         self.muD, self.sigmaD = self._encoder_S(pre_msD, 'encoder_S') # [BS,z_dim],#[BS,z_dim]
@@ -273,20 +271,20 @@ class Image_translation_net(object):
         self.zC = self.muC + self.sigmaC * tf.random_normal(tf.shape(self.muC), 0, 1, dtype=tf.float32)  # [BS,z_dim]
         self.zD = self.muD + self.sigmaD * tf.random_normal(tf.shape(self.muD), 0, 1, dtype=tf.float32)  # [BS,z_dim]
 
-        sR_C = self._generator_S(self.zC, 'generator_S')
-        sR_D = self._generator_S(self.zD, 'generator_S')
+        sRC = self._generator_S(self.zC, 'generator_S')
+        sRD = self._generator_S(self.zD, 'generator_S')
 
-        self.R_C = self._generator_end(sR_C, 'generator_A')
-        self.R_D = self._generator_end(sR_D, 'generator_B')
+        self.RC = self._generator_end(sRC, 'generator_A') #RA_(RB_A)
+        self.RD = self._generator_end(sRD, 'generator_B') #RB_(RA_B)
 
         #VAE_loss
         KL_lossA = 0.5 * tf.reduce_sum(tf.square(self.muA) + tf.square(self.sigmaA) - tf.log(1e-8 + tf.square(self.sigmaA)) - 1, [1])# [BS,z_dim]->[BS,1]
         IO_lossA = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.RA_A, labels=self.XA), [1, 2, 3])# [BS,w,h,c]->[BS,1]
-        VAE_lossA = tf.reduce_mean(self.L1 * KL_lossA + self.L2 * IO_lossA) # [1] #Optimize(EA,GA)
+        VAE_lossA = tf.reduce_mean(self.L1*KL_lossA + self.L2*IO_lossA) # [1] #Optimize(EA,GA)
 
         KL_lossB = 0.5 * tf.reduce_sum(tf.square(self.muB) + tf.square(self.sigmaB) - tf.log(1e-8 + tf.square(self.sigmaB)) - 1, [1])# [BS,z_dim]->[BS,1]
         IO_lossB = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.RB_B, labels=self.XB), [1, 2, 3])# [BS,w,h,c]->[BS,1]
-        VAE_lossB = tf.reduce_mean(self.L1 * KL_lossB + self.L2 * IO_lossB) # [1] #Optimize(EB,GB)
+        VAE_lossB = tf.reduce_mean(self.L1*KL_lossB + self.L2*IO_lossB) # [1] #Optimize(EB,GB)
 
         self.VAE_loss = VAE_lossA + VAE_lossB # [1]
 
@@ -299,25 +297,29 @@ class Image_translation_net(object):
         GAN_lossB_A = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=yB_A, labels=tf.zeros_like(yB_A)))  #fake
         GAN_lossB = GAN_lossB_B + GAN_lossB_A  # [1] #Optimize(EB,GB,DB)
 
-        self.GAN_loss = self.L0 * (GAN_lossA + GAN_lossB) # [1]
+        self.GAN_loss = self.L0*(GAN_lossA + GAN_lossB) # [1]
 
-        # Cycle_loss(EA,GA,EB,GB)(EB,GA,EB,GB)
-        KL_lossA = 0.5 * tf.reduce_sum(tf.square(self.muA) + tf.square(self.sigmaA) - tf.log(1e-8 + tf.square(self.sigmaA)) - 1, [1])  # [BS,z_dim]->[BS,1]
-        KL_lossD = 0.5 * tf.reduce_sum(tf.square(self.muD) + tf.square(self.sigmaD) - tf.log(1e-8 + tf.square(self.sigmaD)) - 1, [1])  # [BS,z_dim]->[BS,1]
-
-        KL_lossB = 0.5 * tf.reduce_sum(tf.square(self.muB) + tf.square(self.sigmaB) - tf.log(1e-8 + tf.square(self.sigmaB)) - 1, [1])  # [BS,z_dim]->[BS,1]
+        # Cycle_loss #Optimize(EA,GA,EB,GB)
         KL_lossC = 0.5 * tf.reduce_sum(tf.square(self.muC) + tf.square(self.sigmaC) - tf.log(1e-8 + tf.square(self.sigmaC)) - 1, [1])  # [BS,z_dim]->[BS,1]
+        CIO_lossA = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.RC, labels=self.XA), [1, 2, 3])# [BS,w,h,c]->[BS,1]
+        Cycle_lossA = tf.reduce_mean(self.L3*KL_lossA + self.L3*KL_lossC + self.L4*CIO_lossA) #[BS,1]->[1]
 
-        self.Cycle_loss = 0
+        KL_lossD = 0.5 * tf.reduce_sum(tf.square(self.muD) + tf.square(self.sigmaD) - tf.log(1e-8 + tf.square(self.sigmaD)) - 1, [1])  # [BS,z_dim]->[BS,1]
+        CIO_lossB = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.RD, labels=self.XB), [1, 2, 3])# [BS,w,h,c]->[BS,1]
+        Cycle_lossB = tf.reduce_mean(self.L3*KL_lossB + self.L3*KL_lossD + self.L4*CIO_lossB) #[BS,1]->[1]
+
+        self.Cycle_loss = Cycle_lossA + Cycle_lossB
 
         #loss
         self.loss = self.VAE_loss + self.GAN_loss + self.Cycle_loss # [1]
 
         # optimizers
         self.optimizer = tf.train.GradientDescentOptimizer(learning_rate=0.001).minimize(self.loss)
+
         #tensorboard
-        self.sum_IO_loss = tf.summary.scalar("IO_loss", self.IO_loss)
-        self.sum_KL_loss = tf.summary.scalar("KL_loss", self.KL_loss)
+        self.sum_VAE_loss = tf.summary.scalar("VAE_loss", self.VAE_loss)
+        self.sum_GAN_loss = tf.summary.scalar("GAN_loss", self.GAN_loss)
+        self.sum_Cycle_loss = tf.summary.scalar("Cycle_loss", self.Cycle_loss)
         self.sum_loss = tf.summary.scalar("loss", self.loss)
         self.sum_merge = tf.summary.merge_all()
 
@@ -350,9 +352,9 @@ class Image_translation_net(object):
                     X = np.reshape(X, [self.BS, 28, 28, 1])
                     X = np.concatenate((X, X, X), axis=3)
                     #train
-                    _, sum_merge, loss, IO_loss, KL_loss = sess.run(
-                        [self.optimizer, self.sum_merge, self.loss, self.IO_loss, self.KL_loss],
-                        feed_dict={self.X: X})
+                    _, sum_merge, loss, VAE_loss, GAN_loss, Cycle_loss = sess.run(
+                        [self.optimizer, self.sum_merge, self.loss, self.VAE_loss, self.GAN_loss, self.Cycle_loss],
+                        feed_dict={self.XA: XA, self.XB: XB})
 
                     if epoch_step % 10 == 0: # tensorboard
                         tf_sum_writer.add_summary(sum_merge, global_step=global_step)
@@ -379,6 +381,6 @@ class Image_translation_net(object):
 
 
 if __name__ == "__main__":
-    vae = VAE(32, 10)
+    vae = Image_translation_net(32, 100)
     vae.build_graph()
     vae.train()
