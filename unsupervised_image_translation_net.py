@@ -348,9 +348,7 @@ class Image_translation_net(object):
             global_step = 0
             for epoch in range(pre_model_epoch + 1, pre_model_epoch + 500):
                 for epoch_step in range(150):
-                    X, label = mnist.train.next_batch(self.BS)
-                    X = np.reshape(X, [self.BS, 28, 28, 1])
-                    X = np.concatenate((X, X, X), axis=3)
+                    XA, XB = self._get_dataset()
                     #train
                     _, sum_merge, loss, VAE_loss, GAN_loss, Cycle_loss = sess.run(
                         [self.optimizer, self.sum_merge, self.loss, self.VAE_loss, self.GAN_loss, self.Cycle_loss],
@@ -369,15 +367,22 @@ class Image_translation_net(object):
                     saver.save(sess, './tfModel/epoch' + str(epoch))
 
                 if epoch % 10 == 0: # save images
-                    generated_image = './generated_image/epoch' + str(epoch)
-                    if not os.path.exists(generated_image):
-                        os.makedirs(generated_image)
-                    test_vec = self._get_random_vector()
-                    img_test = sess.run(self.recon_X, feed_dict={self.z: test_vec})
-                    img_test = img_test * 255.0
-                    img_test.astype(np.uint8)
+                    A2B_path = './generated_image/epoch' + str(epoch) + '/A2B'
+                    B2A_path = './generated_image/epoch' + str(epoch) + '/A2B'
+                    if not os.path.exists(A2B_path):
+                        os.makedirs(A2B_path)
+                    if not os.path.exists(B2A_path):
+                        os.makedirs(B2A_path)
+                    XA, XB = self._get_dataset()
+                    RA_B, RB_A = sess.run([self.RA_B, self.RB_A],feed_dict={self.XA: XA, self.XB: XB})
+                    RA_B, RB_A = RA_B * 255.0, RB_A*255.0
+                    RA_B.astype(np.uint8)
+                    RB_A.astype(np.uint8)
                     for i in range(self.BS):
-                        cv2.imwrite(generated_image + '/' + str(i) + '.jpg', img_test[i])
+                        cv2.imwrite(A2B_path + '/A' + str(i) + '.jpg', XA[i])
+                        cv2.imwrite(A2B_path + '/RB_A' + str(i) + '.jpg', RB_A[i])
+                        cv2.imwrite(B2A_path + '/B' + str(i) + '.jpg', XB[i])
+                        cv2.imwrite(B2A_path + '/RA_B' + str(i) + '.jpg', RA_B[i])
 
 
 if __name__ == "__main__":
