@@ -2,6 +2,7 @@ import os
 import tensorflow as tf
 import numpy as np
 import cv2
+from net_components import *
 from tensorflow.examples.tutorials.mnist import input_data
 
 
@@ -105,7 +106,7 @@ class Image_translation_net(object):
             # defc  # [BS,vec_size]->[BS,4*4*512]
             W_defc = tf.get_variable('W_defc', [z.shape[1].value, 4 * 4 * 1024], initializer=tf.truncated_normal_initializer(stddev=0.02))
             b_defc = tf.get_variable('b_defc', [4 * 4 * 1024], initializer=tf.constant_initializer(0.))
-            z_defc1 = tf.matmul(tensor_z, W_defc) + b_defc
+            z_defc1 = tf.matmul(z, W_defc) + b_defc
             # deflatten  # [BS,4*4*512]->[BS,4,4,512]
             deconv0 = tf.reshape(z_defc1, [-1, 4, 4, 1024])
 
@@ -215,7 +216,7 @@ class Image_translation_net(object):
             a_conv4 = tf.nn.leaky_relu(bn_conv4)
 
             # flatten  #[BS,8,8,512]->[BS,32768]
-            flatten = tf.reshape(a_conv4, [self._BS, 32768])
+            flatten = tf.reshape(a_conv4, [self.BS, 32768])
 
             # fc1 # classify  #[BS,32768]->[BS,1]
             W_fc1 = tf.get_variable('W_fc1', [flatten.shape[1].value, 1], initializer=tf.truncated_normal_initializer(stddev=0.02))
@@ -255,8 +256,27 @@ class Image_translation_net(object):
         real_logits_B = self._discriminator_pre_part(self.recon_X_BbyB, 'discriminator_B_part')
         fake_logits_B = self._discriminator_pre_part(self.recon_X_BbyA, 'discriminator_B_part')
 
-        #VAE_loss
+        #cycle_net
 
+        a_conv1_AbyB = self._encoder_pre_part(self.recon_X_AbyB, 'encoder_A_part')
+        a_conv1_BbyA = self._encoder_pre_part(self.recon_X_BbyA, 'encoder_B_part')
+
+        self.mu_AbyB, self.sigma_AbyB = self._encoder_shared(a_conv1_AbyB, 'encoder_shared') # [bs,z_dim],#[bs,z_dim]
+        self.mu_BbyA, self.sigma_BbyA = self._encoder_shared(a_conv1_BbyA, 'encoder_shared') # [bs,z_dim],#[bs,z_dim]
+
+        self.z_AbyB = self.mu_AbyB + self.sigma_AbyB * tf.random_normal(tf.shape(self.mu_AbyB), 0, 1, dtype=tf.float32)  # [bs,z_dim]
+        self.z_BbyA = self.mu_BbyA + self.sigma_BbyA * tf.random_normal(tf.shape(self.mu_BbyA), 0, 1, dtype=tf.float32)  # [bs,z_dim]
+
+        #VAE_loss
+        IO_loss_A = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.recon_X_AbyA, labels=self.X_A),[1, 2, 3])# [bs,w,h,c]->[bs,1]
+        IO_loss_B = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.recon_X_BbyB, labels=self.X_B),[1, 2, 3])# [bs,w,h,c]->[bs,1]
+        self.IO_loss = tf.reduce_mean(IO_loss_A + IO_loss_B)
+
+        KL_loss_A = 0.5 * tf.reduce_sum(tf.square(self.mu_A) + tf.square(self.sigma_A) - tf.log(1e-8 + tf.square(self.sigma_A)) - 1,[1])# [bs,z_dim]->[bs,1]
+        KL_loss_B = 0.5 * tf.reduce_sum(tf.square(self.mu_B) + tf.square(self.sigma_B) - tf.log(1e-8 + tf.square(self.sigma_B)) - 1,[1])# [bs,z_dim]->[bs,1]
+        self.KL_loss = tf.reduce_mean(KL_loss_A + KL_loss_B)
+
+        self.VAE_loss = self.IO_loss + self.KL_loss
 
         #GAN_loss
         d_loss_real_A = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=real_logits_A, labels=tf.ones_like(real_logits_A)))
@@ -269,7 +289,7 @@ class Image_translation_net(object):
 
         self.GAN_loss = self.d_loss_A + self.d_loss_B
 
-        # Circle_loss
+        # Cycle_loss
 
         # optimizers
         self.optimizer = tf.train.AdamOptimizer(learning_rate=0.001).minimize(self.loss)
