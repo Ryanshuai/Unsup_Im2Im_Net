@@ -235,30 +235,30 @@ class Image_translation_net(object):
         pre_msA = self._encoder_pre(self.XA, 'encoder_A')
         pre_msB = self._encoder_pre(self.XB, 'encoder_B')
 
-        self.muA, self.sigmaA = self._encoder_S(pre_msA, 'encoder_S') # [bs,z_dim],#[bs,z_dim]
-        self.muB, self.sigmaB = self._encoder_S(pre_msB, 'encoder_S') # [bs,z_dim],#[bs,z_dim]
+        self.muA, self.sigmaA = self._encoder_S(pre_msA, 'encoder_S') # [BS,z_dim],#[BS,z_dim]
+        self.muB, self.sigmaB = self._encoder_S(pre_msB, 'encoder_S') # [BS,z_dim],#[BS,z_dim]
 
-        self.zA = self.muA + self.sigmaA * tf.random_normal(tf.shape(self.muA), 0, 1, dtype=tf.float32)  # [bs,z_dim]
-        self.zB = self.muB + self.sigmaB * tf.random_normal(tf.shape(self.muB), 0, 1, dtype=tf.float32)  # [bs,z_dim]
+        self.zA = self.muA + self.sigmaA * tf.random_normal(tf.shape(self.muA), 0, 1, dtype=tf.float32)  # [BS,z_dim]
+        self.zB = self.muB + self.sigmaB * tf.random_normal(tf.shape(self.muB), 0, 1, dtype=tf.float32)  # [BS,z_dim]
 
         sR_A = self._generator_S(self.zA, 'generator_S')
         sR_B = self._generator_S(self.zB, 'generator_S')
 
-        self.RA_A = self._generator_end(sR_A, 'generator_A')
-        self.RA_B = self._generator_end(sR_B, 'generator_A')
+        self.RA_A = self._generator_end(sR_A, 'generator_A') #[BS,W,H,C]
+        self.RA_B = self._generator_end(sR_B, 'generator_A') #[BS,W,H,C]
 
-        self.RB_B = self._generator_end(sR_B, 'generator_B')
-        self.RB_A = self._generator_end(sR_A, 'generator_B')
+        self.RB_B = self._generator_end(sR_B, 'generator_B') #[BS,W,H,C]
+        self.RB_A = self._generator_end(sR_A, 'generator_B') #[BS,W,H,C]
 
         pre_yA_A = self._discriminator_pre(self.RA_A, 'discriminator_A')
         pre_yA_B = self._discriminator_pre(self.RA_B, 'discriminator_A')
-        yA_A = self._discriminator_S(pre_yA_A, 'discriminator_S')
-        yA_B = self._discriminator_S(pre_yA_B, 'discriminator_S')
+        yA_A = self._discriminator_S(pre_yA_A, 'discriminator_S') #[BS,1]
+        yA_B = self._discriminator_S(pre_yA_B, 'discriminator_S') #[BS,1]
 
         pre_yB_B = self._discriminator_pre(self.RB_B, 'discriminator_B')
         pre_yB_A = self._discriminator_pre(self.RB_A, 'discriminator_B')
-        yB_B = self._discriminator_S(pre_yB_B, 'discriminator_S')
-        yB_A = self._discriminator_S(pre_yB_A, 'discriminator_S')
+        yB_B = self._discriminator_S(pre_yB_B, 'discriminator_S') #[BS,1]
+        yB_A = self._discriminator_S(pre_yB_A, 'discriminator_S') #[BS,1]
 
         #cycle_net
         XC = self.RA_B
@@ -267,11 +267,11 @@ class Image_translation_net(object):
         pre_msC= self._encoder_pre(XC, 'encoder_A')
         pre_msD = self._encoder_pre(XD, 'encoder_B')
 
-        self.muC, self.sigmaC = self._encoder_S(pre_msC, 'encoder_S') # [bs,z_dim],#[bs,z_dim]
-        self.muD, self.sigmaD = self._encoder_S(pre_msD, 'encoder_S') # [bs,z_dim],#[bs,z_dim]
+        self.muC, self.sigmaC = self._encoder_S(pre_msC, 'encoder_S') # [BS,z_dim],#[BS,z_dim]
+        self.muD, self.sigmaD = self._encoder_S(pre_msD, 'encoder_S') # [BS,z_dim],#[BS,z_dim]
 
-        self.zC = self.muC + self.sigmaC * tf.random_normal(tf.shape(self.muC), 0, 1, dtype=tf.float32)  # [bs,z_dim]
-        self.zD = self.muD + self.sigmaD * tf.random_normal(tf.shape(self.muD), 0, 1, dtype=tf.float32)  # [bs,z_dim]
+        self.zC = self.muC + self.sigmaC * tf.random_normal(tf.shape(self.muC), 0, 1, dtype=tf.float32)  # [BS,z_dim]
+        self.zD = self.muD + self.sigmaD * tf.random_normal(tf.shape(self.muD), 0, 1, dtype=tf.float32)  # [BS,z_dim]
 
         sR_C = self._generator_S(self.zC, 'generator_S')
         sR_D = self._generator_S(self.zD, 'generator_S')
@@ -280,31 +280,41 @@ class Image_translation_net(object):
         self.R_D = self._generator_end(sR_D, 'generator_B')
 
         #VAE_loss
-        KL_loss_A = 0.5 * tf.reduce_sum(tf.square(self.muA) + tf.square(self.sigmaA) - tf.log(1e-8 + tf.square(self.sigmaA)) - 1, [1])# [bs,z_dim]->[bs,1]
-        KL_loss_B = 0.5 * tf.reduce_sum(tf.square(self.muB) + tf.square(self.sigmaB) - tf.log(1e-8 + tf.square(self.sigmaB)) - 1, [1])# [bs,z_dim]->[bs,1]
-        VAE_KL_loss = tf.reduce_mean(KL_loss_A + KL_loss_B)
+        KL_lossA = 0.5 * tf.reduce_sum(tf.square(self.muA) + tf.square(self.sigmaA) - tf.log(1e-8 + tf.square(self.sigmaA)) - 1, [1])# [BS,z_dim]->[BS,1]
+        IO_lossA = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.RA_A, labels=self.XA), [1, 2, 3])# [BS,w,h,c]->[BS,1]
+        VAE_lossA = tf.reduce_mean(self.L1 * KL_lossA + self.L2 * IO_lossA) # [1] #Optimize(EA,GA)
 
-        IO_loss_A = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.RA_A, labels=self.XA), [1, 2, 3])# [bs,w,h,c]->[bs,1]
-        IO_loss_B = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.RB_B, labels=self.XB), [1, 2, 3])# [bs,w,h,c]->[bs,1]
-        VAE_IO_loss = tf.reduce_mean(IO_loss_A + IO_loss_B)
+        KL_lossB = 0.5 * tf.reduce_sum(tf.square(self.muB) + tf.square(self.sigmaB) - tf.log(1e-8 + tf.square(self.sigmaB)) - 1, [1])# [BS,z_dim]->[BS,1]
+        IO_lossB = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.RB_B, labels=self.XB), [1, 2, 3])# [BS,w,h,c]->[BS,1]
+        VAE_lossB = tf.reduce_mean(self.L1 * KL_lossB + self.L2 * IO_lossB) # [1] #Optimize(EB,GB)
 
-        self.VAE_loss = self.L1 * VAE_KL_loss + self.L2 * VAE_IO_loss
+        self.VAE_loss = VAE_lossA + VAE_lossB # [1]
 
         #GAN_loss
         GAN_lossA_A = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=yA_A, labels=tf.ones_like(yA_A))) #real
         GAN_lossA_B = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=yA_B, labels=tf.zeros_like(yA_B))) #fake
-        GAN_lossA = GAN_lossA_A + GAN_lossA_B  # [1]
+        GAN_lossA = GAN_lossA_A + GAN_lossA_B  # [1] #Optimize(EA,GA,DA)
 
-        GAN_lossB_B = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=yB_B, labels=tf.ones_like(yB_B))) #real
-        GAN_lossB_A = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=yB_A, labels=tf.zeros_like(yB_A))) #fake
-        GAN_lossB = GAN_lossB_B + GAN_lossB_A  # [1]
+        GAN_lossB_B = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=yB_B, labels=tf.ones_like(yB_B)))  #real
+        GAN_lossB_A = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=yB_A, labels=tf.zeros_like(yB_A)))  #fake
+        GAN_lossB = GAN_lossB_B + GAN_lossB_A  # [1] #Optimize(EB,GB,DB)
 
-        self.GAN_loss = GAN_lossA + GAN_lossB
+        self.GAN_loss = self.L0 * (GAN_lossA + GAN_lossB) # [1]
 
-        # Cycle_loss
+        # Cycle_loss(EA,GA,EB,GB)(EB,GA,EB,GB)
+        KL_lossA = 0.5 * tf.reduce_sum(tf.square(self.muA) + tf.square(self.sigmaA) - tf.log(1e-8 + tf.square(self.sigmaA)) - 1, [1])  # [BS,z_dim]->[BS,1]
+        KL_lossD = 0.5 * tf.reduce_sum(tf.square(self.muD) + tf.square(self.sigmaD) - tf.log(1e-8 + tf.square(self.sigmaD)) - 1, [1])  # [BS,z_dim]->[BS,1]
+
+        KL_lossB = 0.5 * tf.reduce_sum(tf.square(self.muB) + tf.square(self.sigmaB) - tf.log(1e-8 + tf.square(self.sigmaB)) - 1, [1])  # [BS,z_dim]->[BS,1]
+        KL_lossC = 0.5 * tf.reduce_sum(tf.square(self.muC) + tf.square(self.sigmaC) - tf.log(1e-8 + tf.square(self.sigmaC)) - 1, [1])  # [BS,z_dim]->[BS,1]
+
+        self.Cycle_loss = 0
+
+        #loss
+        self.loss = self.VAE_loss + self.GAN_loss + self.Cycle_loss # [1]
 
         # optimizers
-        self.optimizer = tf.train.AdamOptimizer(learning_rate=0.001).minimize(self.loss)
+        self.optimizer = tf.train.GradientDescentOptimizer(learning_rate=0.001).minimize(self.loss)
         #tensorboard
         self.sum_IO_loss = tf.summary.scalar("IO_loss", self.IO_loss)
         self.sum_KL_loss = tf.summary.scalar("KL_loss", self.KL_loss)
