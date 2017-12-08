@@ -43,7 +43,6 @@ class Image_translation_net(object):
             image = image / 255.0
             return image
 
-        train = load('/Users/chenbin/Desktop/TensorFlow/test_ml/train_32x32.mat')
         #make dataset
         dataset = tf.data.Dataset.from_tensor_slices(tensor_image_paths)
         #dataset = dataset.repeat(32)
