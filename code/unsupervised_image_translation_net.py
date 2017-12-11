@@ -379,7 +379,7 @@ class Image_translation_net(object):
             global_step = 0
             for epoch in range(pre_model_epoch + 1, pre_model_epoch + 500):
                 sess.run(svhn_iterator.initializer)
-                for epoch_step in range(150):
+                for epoch_step in range(1500):
                     XA, labelA = mnist.train.next_batch(self.BS)
                     XB, labelB = sess.run(svhn_iterator.get_next())
                     #train
@@ -393,13 +393,13 @@ class Image_translation_net(object):
                     print('epoch:', epoch, 'epoch_step:', epoch_step, 'global_step:', global_step)
                     global_step = global_step + 1
 
-                if epoch % 50 == 0: # save model
+                if epoch % 5 == 0: # save model
                     print('---------------------')
                     if not os.path.exists(tfModel_path):
                         os.makedirs(tfModel_path)
                     saver.save(sess, tfModel_path + '/epoch' + str(epoch))
 
-                if epoch % 10 == 0: # save images
+                if epoch % 1 == 0: # save images
                     A2B_path = self.parent_path + '/generated_image/epoch' + str(epoch) + '/A2B'
                     B2A_path = self.parent_path + '/generated_image/epoch' + str(epoch) + '/A2B'
                     if not os.path.exists(A2B_path):
