@@ -3,7 +3,7 @@ import tensorflow as tf
 import numpy as np
 import cv2
 from tensorflow.examples.tutorials.mnist import input_data
-from scipy.io import loadmat as load
+from scipy.io import loadmat
 
 
 class Image_translation_net(object):
@@ -21,38 +21,34 @@ class Image_translation_net(object):
 
 
     def _get_dataset(self):
-        mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
-        #get image paths
         current_dir = os.getcwd()
-        # parent = os.path.dirname(current_dir)
-        image_dir = os.path.join(current_dir, 'real_image')
-        image_paths = []
-        for each in os.listdir(image_dir):
-            image_paths.append(os.path.join(image_dir, each))
-        tensor_image_paths = tf.convert_to_tensor(image_paths, dtype=tf.string)
-        #data processing func used in map
-        def preprocessing(filename):
-            image_string = tf.read_file(filename)
-            image = tf.image.decode_png(image_string)
-            image = tf.image.resize_images(image, [128, 128])
-            image.set_shape([128, 128, 3])
+        parent_path = os.path.dirname(current_dir)
+
+        mnist_dir = os.path.join(parent_path, 'MNIST-data')
+        mnist = input_data.read_data_sets(mnist_dir, one_hot=True)
+
+        svhn_dir = os.path.join(parent_path, 'SVHN-data')
+        svhn_train_data = loadmat(svhn_dir + '/train_32x32.mat')
+        XXX = svhn_train_data['X'].transpose((3, 0, 1, 2))
+        yyy = svhn_train_data['y']
+
+        def preprocessing(image, label): # data processing func used in map
+            image = tf.image.resize_images(image, [28, 28])
+            image.set_shape([28, 28, 3])
             # image = tf.image.random_flip_left_right(image)
             # image = tf.image.random_brightness(image, max_delta=0.1)
             # image = tf.image.random_contrast(image, lower=0.9, upper=1.1)
             image = tf.cast(image, tf.float32)
-            image = image / 255.0
-            return image
+            # image = image / 255.0
+            return image, label
 
-        #make dataset
-        dataset = tf.data.Dataset.from_tensor_slices(tensor_image_paths)
-        #dataset = dataset.repeat(32)
+        dataset = tf.data.Dataset.from_tensor_slices((XXX, yyy))
+        # dataset = dataset.repeat(32)
         dataset = dataset.map(preprocessing)
         # dataset = dataset.shuffle(3200)
         dataset = dataset.batch(self.BS)
 
-
-        return dataset
-
+        return dataset, mnist
 
 
     def _encoder_pre(self, X, name, reuse=True):
@@ -260,7 +256,7 @@ class Image_translation_net(object):
     def build_graph(self):
         # placeholder
         self.XA = tf.placeholder(tf.float32, [self.BS, 28, 28 ,3]) #[BS,W,H,C]
-        self.XmuB = tf.placeholder(tf.float32, [self.BS, 28, 28 ,3]) #[BS,W,H,C]
+        self.XB = tf.placeholder(tf.float32, [self.BS, 28, 28 ,3]) #[BS,W,H,C]
         # net
         pre_msA = self._encoder_pre(self.XA, 'encoder_A')
         pre_msB = self._encoder_pre(self.XB, 'encoder_B')
@@ -362,7 +358,8 @@ class Image_translation_net(object):
         saver = tf.train.Saver()
         ckpt = tf.train.get_checkpoint_state(checkpoint_dir='tfModel/')
 
-        mnist = self._get_dataset()
+        svhn_dataset, mnist = self._get_dataset()
+        svhn_iterator = svhn_dataset.make_initializable_iterator()
 
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
@@ -379,8 +376,15 @@ class Image_translation_net(object):
             tf_sum_writer.add_graph(sess.graph)
             global_step = 0
             for epoch in range(pre_model_epoch + 1, pre_model_epoch + 500):
+                sess.run(svhn_iterator.initializer)
                 for epoch_step in range(150):
-                    XA, XB = self._get_dataset()
+                    XA, labelA = mnist.train.next_batch(self.BS)
+                    XB, labelB = sess.run(svhn_iterator.get_next())
+                    print('########################################')
+                    print(XA.shape)
+                    print(labelA.shape)
+                    print(XB.shape)
+                    print(labelB.shape)
                     #train
                     _, sum_merge, loss, VAE_loss, GAN_loss, Cycle_loss = sess.run(
                         [self.optimizer, self.sum_merge, self.loss, self.VAE_loss, self.GAN_loss, self.Cycle_loss],
