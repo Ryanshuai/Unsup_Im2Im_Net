@@ -11,6 +11,8 @@ class Image_translation_net(object):
         self.BS = batch_size
         self.z_dim = z_dim
         self.L0, self.L1, self.L2, self.L3, self.L4 = 10, 0.1, 100, 0.1, 100
+        current_dir = os.getcwd()
+        self.parent_path = os.path.dirname(current_dir)
 
 
     def _get_random_vector(self, mu=None, sigma=None): #mu:[z_dim], #sigma:[z_dim]
@@ -21,13 +23,10 @@ class Image_translation_net(object):
 
 
     def _get_dataset(self):
-        current_dir = os.getcwd()
-        parent_path = os.path.dirname(current_dir)
+        mnist_dir = os.path.join(self.parent_path, 'MNIST-data')
+        mnist = input_data.read_data_sets(mnist_dir)
 
-        mnist_dir = os.path.join(parent_path, 'MNIST-data')
-        mnist = input_data.read_data_sets(mnist_dir, one_hot=True)
-
-        svhn_dir = os.path.join(parent_path, 'SVHN-data')
+        svhn_dir = os.path.join(self.parent_path, 'SVHN-data')
         svhn_train_data = loadmat(svhn_dir + '/train_32x32.mat')
         XXX = svhn_train_data['X'].transpose((3, 0, 1, 2))
         yyy = svhn_train_data['y']
@@ -52,7 +51,6 @@ class Image_translation_net(object):
 
     def _encoder_pre(self, X, name, reuse=tf.AUTO_REUSE):
         with tf.name_scope(name), tf.variable_scope(name, reuse=reuse):
-            print('X', X.shape)
             # conv1  #[BS,32,32,3]->[BS,16,16,64]
             W_conv1 = tf.get_variable('W_conv1', [5, 5, 3, 64], initializer=tf.contrib.layers.xavier_initializer_conv2d())
             b_conv1 = tf.get_variable('b_conv1', initializer=tf.constant(0.))
@@ -69,7 +67,6 @@ class Image_translation_net(object):
 
     def _encoder_S(self, X_pred, name, reuse=tf.AUTO_REUSE):
         with tf.name_scope(name), tf.variable_scope(name, reuse=reuse):
-            print('X_pred', X_pred.shape)
             # conv2  #[BS,16,16,64]->[BS,8,8,128]
             W_conv2 = tf.get_variable('W_conv2', [5, 5, 64, 128],initializer=tf.contrib.layers.xavier_initializer_conv2d())
             b_conv2 = tf.get_variable('b_conv2', initializer=tf.constant(0.))
@@ -101,7 +98,6 @@ class Image_translation_net(object):
             a_conv4 = tf.nn.leaky_relu(bn_conv4)
 
             # flatten  #[BS,8,8,512]->[BS,?]
-            print('a_conv4', a_conv4.shape)
             flatten = tf.reshape(a_conv4, [self.BS, -1])
 
             # fc1 #[BS,?]->[BS,1024]
@@ -148,7 +144,7 @@ class Image_translation_net(object):
 
             # deconv1  # [BS,2,2,1024]->[BS,4,4,512]
             W_deconv1 = tf.get_variable('W_deconv1', [5, 5, 512, 1024], initializer=tf.contrib.layers.xavier_initializer())
-            z_deconv1 = tf.nn.conv2d_transpose(a_deconv0, W_deconv1, [self.BS, 8, 8, 512], [1, 2, 2, 1])
+            z_deconv1 = tf.nn.conv2d_transpose(a_deconv0, W_deconv1, [self.BS, 4, 4, 512], [1, 2, 2, 1])
             mean_deconv1, variance_deconv1 = tf.nn.moments(z_deconv1, axes=[0, 1, 2])
             offset_deconv1 = tf.get_variable('offset_deconv1', initializer=tf.zeros([512]))
             scale_deconv1 = tf.get_variable('scale_deconv1', initializer=tf.ones([512]))
@@ -256,10 +252,12 @@ class Image_translation_net(object):
 
 
     def build_graph(self):
-        # placeholder
-        self.XA = tf.placeholder(tf.float32, [self.BS, 28, 28 ,3]) #[BS,W,H,C] mnist
-        XA_32 = tf.image.resize_bicubic(self.XA, [32, 32])
-        self.XB = tf.placeholder(tf.float32, [self.BS, 32, 32 ,3]) #[BS,W,H,C] svhn
+        # placeholder and preprocess
+        self.XA = tf.placeholder(tf.float32, [None, 784]) #[BS,W*H*C] mnist
+        XA_28_1 = tf.reshape(self.XA, [self.BS, 28, 28 ,1])
+        XA_32_1 = tf.image.resize_bicubic(XA_28_1, [32, 32])
+        XA_32 = tf.concat([XA_32_1, XA_32_1, XA_32_1], axis=3)
+        self.XB = tf.placeholder(tf.float32, [None, 32, 32 ,3]) #[BS,W,H,C] svhn
         # net
         pre_msA = self._encoder_pre(XA_32, 'encoder_A')
         pre_msB = self._encoder_pre(self.XB, 'encoder_B')
@@ -359,7 +357,8 @@ class Image_translation_net(object):
         tf_sum_writer = tf.summary.FileWriter('logs')
 
         saver = tf.train.Saver()
-        ckpt = tf.train.get_checkpoint_state(checkpoint_dir='tfModel/')
+        tfModel_path = self.parent_path + 'tfModel/'
+        ckpt = tf.train.get_checkpoint_state(checkpoint_dir=tfModel_path)
 
         svhn_dataset, mnist = self._get_dataset()
         svhn_iterator = svhn_dataset.make_initializable_iterator()
@@ -382,16 +381,7 @@ class Image_translation_net(object):
                 sess.run(svhn_iterator.initializer)
                 for epoch_step in range(150):
                     XA, labelA = mnist.train.next_batch(self.BS)
-
                     XB, labelB = sess.run(svhn_iterator.get_next())
-                    print('########################################')
-                    print(XA.shape)
-                    print(labelA.shape)
-                    print(XB.shape)
-                    print(labelB.shape)
-
-                    #im = Image.fromarray(XA.astype("uint8"))
-
                     #train
                     _, sum_merge, loss, VAE_loss, GAN_loss, Cycle_loss = sess.run(
                         [self.optimizer, self.sum_merge, self.loss, self.VAE_loss, self.GAN_loss, self.Cycle_loss],
@@ -405,20 +395,21 @@ class Image_translation_net(object):
 
                 if epoch % 50 == 0: # save model
                     print('---------------------')
-                    if not os.path.exists('./tfModel/'):
-                        os.makedirs('./tfModel/')
-                    saver.save(sess, './tfModel/epoch' + str(epoch))
+                    if not os.path.exists(tfModel_path):
+                        os.makedirs(tfModel_path)
+                    saver.save(sess, tfModel_path + '/epoch' + str(epoch))
 
                 if epoch % 10 == 0: # save images
-                    A2B_path = './generated_image/epoch' + str(epoch) + '/A2B'
-                    B2A_path = './generated_image/epoch' + str(epoch) + '/A2B'
+                    A2B_path = self.parent_path + '/generated_image/epoch' + str(epoch) + '/A2B'
+                    B2A_path = self.parent_path + '/generated_image/epoch' + str(epoch) + '/A2B'
                     if not os.path.exists(A2B_path):
                         os.makedirs(A2B_path)
                     if not os.path.exists(B2A_path):
                         os.makedirs(B2A_path)
-                    XA, XB = self._get_dataset()
+                    XA, labelA = mnist.train.next_batch(self.BS)
+                    XB, labelB = sess.run(svhn_iterator.get_next())
                     RA_B, RB_A = sess.run([self.RA_B, self.RB_A],feed_dict={self.XA: XA, self.XB: XB})
-                    RA_B, RB_A = RA_B * 255.0, RB_A*255.0
+                    RA_B, RB_A = RA_B * 255.0, RB_A * 255.0
                     RA_B.astype(np.uint8)
                     RB_A.astype(np.uint8)
                     for i in range(self.BS):
