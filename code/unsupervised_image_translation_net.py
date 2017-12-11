@@ -39,7 +39,7 @@ class Image_translation_net(object):
             # image = tf.image.random_brightness(image, max_delta=0.1)
             # image = tf.image.random_contrast(image, lower=0.9, upper=1.1)
             image = tf.cast(image, tf.float32)
-            # image = image / 255.0
+            image = image / 255.0
             return image, label
 
         dataset = tf.data.Dataset.from_tensor_slices((XXX, yyy))
@@ -51,8 +51,9 @@ class Image_translation_net(object):
         return dataset, mnist
 
 
-    def _encoder_pre(self, X, name, reuse=True):
+    def _encoder_pre(self, X, name, reuse=tf.AUTO_REUSE):
         with tf.name_scope(name), tf.variable_scope(name, reuse=reuse):
+            print('X', X.shape)
             # conv1  #[BS,32,32,3]->[BS,16,16,64]
             W_conv1 = tf.get_variable('W_conv1', [5, 5, 3, 64], initializer=tf.contrib.layers.xavier_initializer_conv2d())
             b_conv1 = tf.get_variable('b_conv1', initializer=tf.constant(0.))
@@ -67,8 +68,9 @@ class Image_translation_net(object):
             return a_conv1
 
 
-    def _encoder_S(self, X_pred, name, reuse=True):
+    def _encoder_S(self, X_pred, name, reuse=tf.AUTO_REUSE):
         with tf.name_scope(name), tf.variable_scope(name, reuse=reuse):
+            print('X_pred', X_pred.shape)
             # conv2  #[BS,16,16,64]->[BS,8,8,128]
             W_conv2 = tf.get_variable('W_conv2', [5, 5, 64, 128],initializer=tf.contrib.layers.xavier_initializer_conv2d())
             b_conv2 = tf.get_variable('b_conv2', initializer=tf.constant(0.))
@@ -100,6 +102,7 @@ class Image_translation_net(object):
             a_conv4 = tf.nn.leaky_relu(bn_conv4)
 
             # flatten  #[BS,8,8,512]->[BS,32768]
+            print('a_conv4', a_conv4.shape)
             flatten = tf.reshape(a_conv4, [self.BS, -1])
 
             # fc1 #[BS,32768]->[BS,1024]
@@ -129,7 +132,7 @@ class Image_translation_net(object):
             return mean, stddev # [bs, z_dim],#[bs, z_dim]
 
 
-    def _generator_S(self, z, name, reuse=True):
+    def _generator_S(self, z, name, reuse=tf.AUTO_REUSE):
         with tf.name_scope(name), tf.variable_scope(name, reuse=reuse):
             # defc  # [BS,vec_size]->[BS,4*4*512]
             W_defc = tf.get_variable('W_defc', [z.shape[1].value, 4 * 4 * 1024], initializer=tf.truncated_normal_initializer(stddev=0.02))
@@ -175,7 +178,7 @@ class Image_translation_net(object):
         return a_deconv3
 
 
-    def _generator_end(self, recon_X_shared, name, reuse=True):
+    def _generator_end(self, recon_X_shared, name, reuse=tf.AUTO_REUSE):
         with tf.name_scope(name), tf.variable_scope(name, reuse=reuse):
             # deconv4  # [BS,32,32,128]->[BS,64,64,64]
             W_deconv4 = tf.get_variable('W_deconv4', [5, 5, 64, 128], initializer=tf.truncated_normal_initializer(stddev=0.02))
@@ -194,7 +197,7 @@ class Image_translation_net(object):
             return z_deconv5
 
 
-    def _discriminator_pre(self, recon_X, name, reuse=True):
+    def _discriminator_pre(self, recon_X, name, reuse=tf.AUTO_REUSE):
         with tf.name_scope(name), tf.variable_scope(name, reuse=reuse):
             # conv1  #[BS,128,128,3]->[BS,64,64,64]
             W_conv1 = tf.get_variable('W_conv1', [5, 5, 3, 64], initializer=tf.truncated_normal_initializer(stddev=0.02))
@@ -209,7 +212,7 @@ class Image_translation_net(object):
             return a_conv1
 
 
-    def _discriminator_S(self, im_pred, name, reuse=True):
+    def _discriminator_S(self, im_pred, name, reuse=tf.AUTO_REUSE):
         with tf.name_scope(name), tf.variable_scope(name, reuse=reuse):
             # conv2  #[BS,64,64,64]->[BS,32,32,128]
             W_conv2 = tf.get_variable('W_conv2', [5, 5, 64, 128], initializer=tf.truncated_normal_initializer(stddev=0.02))
