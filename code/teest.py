@@ -3,6 +3,7 @@ import tensorflow as tf
 import numpy as np
 from tensorflow.examples.tutorials.mnist import input_data
 from scipy.io import loadmat
+from PIL import Image
 
 
 current_dir = os.getcwd()
@@ -28,7 +29,7 @@ dataset = tf.data.Dataset.from_tensor_slices((XXX, yyy))
 #dataset = dataset.repeat(32)
 dataset = dataset.map(preprocessing)
 # dataset = dataset.shuffle(3200)
-dataset = dataset.batch(1)
+dataset = dataset.batch(32)
 
 
 iterator = dataset.make_initializable_iterator()
@@ -37,3 +38,9 @@ with tf.Session() as sess:
     sess.run(iterator.initializer)
     test_data = sess.run(iterator.get_next())
     print(test_data[0].shape)
+    print(test_data[1].shape)
+    for i in range(32):
+        im = Image.fromarray(test_data[0][i].astype("uint8"))
+        im.show()
+        print(test_data[1][i])
+
