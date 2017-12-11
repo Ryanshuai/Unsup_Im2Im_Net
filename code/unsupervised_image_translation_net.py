@@ -33,8 +33,7 @@ class Image_translation_net(object):
         yyy = svhn_train_data['y']
 
         def preprocessing(image, label): # data processing func used in map
-            image = tf.image.resize_images(image, [28, 28])
-            image.set_shape([28, 28, 3])
+            image.set_shape([32, 32, 3])
             # image = tf.image.random_flip_left_right(image)
             # image = tf.image.random_brightness(image, max_delta=0.1)
             # image = tf.image.random_contrast(image, lower=0.9, upper=1.1)
@@ -101,11 +100,11 @@ class Image_translation_net(object):
             bn_conv4 = tf.nn.batch_normalization(z_conv4, mean_conv4, variance_conv4, offset_conv4, scale_conv4, 1e-5)
             a_conv4 = tf.nn.leaky_relu(bn_conv4)
 
-            # flatten  #[BS,8,8,512]->[BS,32768]
+            # flatten  #[BS,8,8,512]->[BS,?]
             print('a_conv4', a_conv4.shape)
             flatten = tf.reshape(a_conv4, [self.BS, -1])
 
-            # fc1 #[BS,32768]->[BS,1024]
+            # fc1 #[BS,?]->[BS,1024]
             W_fc1 = tf.get_variable('W_fc1', [flatten.shape[1].value, 1024],initializer=tf.contrib.layers.xavier_initializer())
             b_fc1 = tf.get_variable('b_fc1', [1024], initializer=tf.constant_initializer(0.))
             z_fc1 = tf.matmul(flatten, W_fc1) + b_fc1
@@ -134,12 +133,12 @@ class Image_translation_net(object):
 
     def _generator_S(self, z, name, reuse=tf.AUTO_REUSE):
         with tf.name_scope(name), tf.variable_scope(name, reuse=reuse):
-            # defc  # [BS,vec_size]->[BS,4*4*512]
-            W_defc = tf.get_variable('W_defc', [z.shape[1].value, 4 * 4 * 1024], initializer=tf.truncated_normal_initializer(stddev=0.02))
-            b_defc = tf.get_variable('b_defc', [4 * 4 * 1024], initializer=tf.constant_initializer(0.))
+            # defc  # [BS,vec_size]->[BS,2*2*1024]
+            W_defc = tf.get_variable('W_defc', [z.shape[1].value, 2 * 2 * 1024], initializer=tf.contrib.layers.xavier_initializer())
+            b_defc = tf.get_variable('b_defc', [2 * 2 * 1024], initializer=tf.constant_initializer(0.))
             z_defc1 = tf.matmul(z, W_defc) + b_defc
-            # deflatten  # [BS,4*4*512]->[BS,4,4,512]
-            deconv0 = tf.reshape(z_defc1, [-1, 4, 4, 1024])
+            # deflatten  # [BS,2*2*1024]->[BS,2,2,1024]
+            deconv0 = tf.reshape(z_defc1, [-1, 2, 2, 1024])
 
             mean_conv0, variance_conv0 = tf.nn.moments(deconv0, axes=[0, 1, 2])
             offset_deconv0 = tf.get_variable('offset_deconv0', initializer=tf.zeros([1024]))
@@ -147,8 +146,8 @@ class Image_translation_net(object):
             bn_deconv0 = tf.nn.batch_normalization(deconv0, mean_conv0, variance_conv0, offset_deconv0, scale_deconv0, 1e-5)
             a_deconv0 = tf.nn.relu(bn_deconv0)
 
-            # deconv1  # [BS,4,4,1024]->[BS,8,8,512]
-            W_deconv1 = tf.get_variable('W_deconv1', [5, 5, 512, 1024], initializer=tf.truncated_normal_initializer(stddev=0.02))
+            # deconv1  # [BS,2,2,1024]->[BS,4,4,512]
+            W_deconv1 = tf.get_variable('W_deconv1', [5, 5, 512, 1024], initializer=tf.contrib.layers.xavier_initializer())
             z_deconv1 = tf.nn.conv2d_transpose(a_deconv0, W_deconv1, [self.BS, 8, 8, 512], [1, 2, 2, 1])
             mean_deconv1, variance_deconv1 = tf.nn.moments(z_deconv1, axes=[0, 1, 2])
             offset_deconv1 = tf.get_variable('offset_deconv1', initializer=tf.zeros([512]))
@@ -156,18 +155,18 @@ class Image_translation_net(object):
             bn_deconv1 = tf.nn.batch_normalization(z_deconv1, mean_deconv1, variance_deconv1, offset_deconv1, scale_deconv1, 1e-5)
             a_deconv1 = tf.nn.relu(bn_deconv1)
 
-            # deconv2  # [BS,8,8,512]->[BS,16,16,256]
-            W_deconv2 = tf.get_variable('W_deconv2', [5, 5, 256, 512], initializer=tf.truncated_normal_initializer(stddev=0.02))
-            z_deconv2 = tf.nn.conv2d_transpose(a_deconv1, W_deconv2, [self.BS, 16, 16, 256], [1, 2, 2, 1])
+            # deconv2  # [BS,4,4,512]->[BS,8,8,256]
+            W_deconv2 = tf.get_variable('W_deconv2', [5, 5, 256, 512], initializer=tf.contrib.layers.xavier_initializer())
+            z_deconv2 = tf.nn.conv2d_transpose(a_deconv1, W_deconv2, [self.BS, 8, 8, 256], [1, 2, 2, 1])
             mean_deconv2, variance_deconv2 = tf.nn.moments(z_deconv2, axes=[0, 1, 2])
             offset_deconv2 = tf.get_variable('offset_deconv2', initializer=tf.zeros([256]))
             scale_deconv2 = tf.get_variable('scale_deconv2', initializer=tf.ones([256]))
             bn_deconv2 = tf.nn.batch_normalization(z_deconv2, mean_deconv2, variance_deconv2, offset_deconv2, scale_deconv2, 1e-5)
             a_deconv2 = tf.nn.relu(bn_deconv2)
 
-            # deconv3  # [BS,16,16,256]->[BS,32,32,128]
-            W_deconv3 = tf.get_variable('W_deconv3', [5, 5, 128, 256], initializer=tf.truncated_normal_initializer(stddev=0.02))
-            z_deconv3 = tf.nn.conv2d_transpose(a_deconv2, W_deconv3, [self.BS, 32, 32, 128], [1, 2, 2, 1])
+            # deconv3  # [BS,8,8,256]->[BS,16,16,128]
+            W_deconv3 = tf.get_variable('W_deconv3', [5, 5, 128, 256], initializer=tf.contrib.layers.xavier_initializer())
+            z_deconv3 = tf.nn.conv2d_transpose(a_deconv2, W_deconv3, [self.BS, 16, 16, 128], [1, 2, 2, 1])
             mean_deconv3, variance_deconv3 = tf.nn.moments(z_deconv3, axes=[0, 1, 2])
             offset_deconv3 = tf.get_variable('offset_deconv3', initializer=tf.zeros([128]))
             scale_deconv3 = tf.get_variable('scale_deconv3', initializer=tf.ones([128]))
@@ -180,18 +179,18 @@ class Image_translation_net(object):
 
     def _generator_end(self, recon_X_shared, name, reuse=tf.AUTO_REUSE):
         with tf.name_scope(name), tf.variable_scope(name, reuse=reuse):
-            # deconv4  # [BS,32,32,128]->[BS,64,64,64]
-            W_deconv4 = tf.get_variable('W_deconv4', [5, 5, 64, 128], initializer=tf.truncated_normal_initializer(stddev=0.02))
-            z_deconv4 = tf.nn.conv2d_transpose(recon_X_shared, W_deconv4, [self.BS, 64, 64, 64], [1, 2, 2, 1])
+            # deconv4  # [BS,16,16,128]->[BS,32,32,64]
+            W_deconv4 = tf.get_variable('W_deconv4', [5, 5, 64, 128], initializer=tf.contrib.layers.xavier_initializer())
+            z_deconv4 = tf.nn.conv2d_transpose(recon_X_shared, W_deconv4, [self.BS, 32, 32, 64], [1, 2, 2, 1])
             mean_deconv4, variance_deconv4 = tf.nn.moments(z_deconv4, axes=[0, 1, 2])
             offset_deconv4 = tf.get_variable('offset_deconv4', initializer=tf.zeros([64]))
             scale_deconv4 = tf.get_variable('scale_deconv4', initializer=tf.ones([64]))
             bn_deconv4 = tf.nn.batch_normalization(z_deconv4, mean_deconv4, variance_deconv4, offset_deconv4, scale_deconv4,1e-5)
             a_deconv4 = tf.nn.relu(bn_deconv4)
 
-            # deconv5  # [BS,64,64,64]->[BS,128,128,3]
-            W_deconv5 = tf.get_variable('W_deconv5', [5, 5, 3, 64], initializer=tf.truncated_normal_initializer(stddev=0.02))
-            z_deconv5 = tf.nn.conv2d_transpose(a_deconv4, W_deconv5, [self.BS, 128, 128, 3], [1, 2, 2, 1])
+            # deconv5  # [BS,32,32,64]->[BS,32,32,3]
+            W_deconv5 = tf.get_variable('W_deconv5', [5, 5, 3, 64], initializer=tf.contrib.layers.xavier_initializer())
+            z_deconv5 = tf.nn.conv2d_transpose(a_deconv4, W_deconv5, [self.BS, 32, 32, 3], [1, 1, 1, 1])
 
             self.g_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=name)
             return z_deconv5
@@ -199,8 +198,8 @@ class Image_translation_net(object):
 
     def _discriminator_pre(self, recon_X, name, reuse=tf.AUTO_REUSE):
         with tf.name_scope(name), tf.variable_scope(name, reuse=reuse):
-            # conv1  #[BS,128,128,3]->[BS,64,64,64]
-            W_conv1 = tf.get_variable('W_conv1', [5, 5, 3, 64], initializer=tf.truncated_normal_initializer(stddev=0.02))
+            # conv1  #[BS,32,32,3]->[BS,16,16,64]
+            W_conv1 = tf.get_variable('W_conv1', [5, 5, 3, 64], initializer=tf.contrib.layers.xavier_initializer())
             b_conv1 = tf.get_variable('b_conv1', initializer=tf.constant(0.))
             z_conv1 = tf.nn.conv2d(recon_X / 255, W_conv1, strides=[1, 2, 2, 1], padding='SAME') + b_conv1
             mean_conv1, variance_conv1 = tf.nn.moments(z_conv1, axes=[0, 1, 2])
@@ -214,8 +213,8 @@ class Image_translation_net(object):
 
     def _discriminator_S(self, im_pred, name, reuse=tf.AUTO_REUSE):
         with tf.name_scope(name), tf.variable_scope(name, reuse=reuse):
-            # conv2  #[BS,64,64,64]->[BS,32,32,128]
-            W_conv2 = tf.get_variable('W_conv2', [5, 5, 64, 128], initializer=tf.truncated_normal_initializer(stddev=0.02))
+            # conv2  #[BS,16,16,64]->[BS,8,8,128]
+            W_conv2 = tf.get_variable('W_conv2', [5, 5, 64, 128], initializer=tf.contrib.layers.xavier_initializer())
             b_conv2 = tf.get_variable('b_conv2', initializer=tf.constant(0.))
             z_conv2 = tf.nn.conv2d(im_pred, W_conv2, strides=[1, 2, 2, 1], padding='SAME') + b_conv2
             mean_conv2, variance_conv2 = tf.nn.moments(z_conv2, axes=[0, 1, 2])
@@ -224,8 +223,8 @@ class Image_translation_net(object):
             bn_conv2 = tf.nn.batch_normalization(z_conv2, mean_conv2, variance_conv2, offset_conv2, scale_conv2, 1e-5)
             a_conv2 = tf.nn.leaky_relu(bn_conv2)
 
-            # conv3  #[BS,32,32,128]->[BS,16,16,256]
-            W_conv3 = tf.get_variable('W_conv3', [5, 5, 128, 256], initializer=tf.truncated_normal_initializer(stddev=0.02))
+            # conv3  #[BS,8,8,128]->[BS,4,4,256]
+            W_conv3 = tf.get_variable('W_conv3', [5, 5, 128, 256], initializer=tf.contrib.layers.xavier_initializer())
             b_conv3 = tf.get_variable('b_conv3', initializer=tf.constant(0.))
             z_conv3 = tf.nn.conv2d(a_conv2, W_conv3, strides=[1, 2, 2, 1], padding='SAME') + b_conv3
             mean_conv3, variance_conv3 = tf.nn.moments(z_conv3, axes=[0, 1, 2])
@@ -234,8 +233,8 @@ class Image_translation_net(object):
             bn_conv3 = tf.nn.batch_normalization(z_conv3, mean_conv3, variance_conv3, offset_conv3, scale_conv3, 1e-5)
             a_conv3 = tf.nn.leaky_relu(bn_conv3)
 
-            # conv4  #[BS,16,16,256]->[BS,8,8,512]
-            W_conv4 = tf.get_variable('W_conv4', [5, 5, 256, 512], initializer=tf.truncated_normal_initializer(stddev=0.02))
+            # conv4  #[BS,4,4,256]->[BS,2,2,512]
+            W_conv4 = tf.get_variable('W_conv4', [5, 5, 256, 512], initializer=tf.contrib.layers.xavier_initializer())
             b_conv4 = tf.get_variable('b_conv4', initializer=tf.constant(0.))
             z_conv4 = tf.nn.conv2d(a_conv3, W_conv4, strides=[1, 2, 2, 1], padding='SAME') + b_conv4
             mean_conv4, variance_conv4 = tf.nn.moments(z_conv4, axes=[0, 1, 2])
@@ -244,11 +243,11 @@ class Image_translation_net(object):
             bn_conv4 = tf.nn.batch_normalization(z_conv4, mean_conv4, variance_conv4, offset_conv4, scale_conv4, 1e-5)
             a_conv4 = tf.nn.leaky_relu(bn_conv4)
 
-            # flatten  #[BS,8,8,512]->[BS,32768]
-            flatten = tf.reshape(a_conv4, [self.BS, 32768])
+            # flatten  #[BS,2,2,512]->[BS,?]
+            flatten = tf.reshape(a_conv4, [self.BS, -1])
 
-            # fc1 # classify  #[BS,32768]->[BS,1]
-            W_fc1 = tf.get_variable('W_fc1', [flatten.shape[1].value, 1], initializer=tf.truncated_normal_initializer(stddev=0.02))
+            # fc1 # classify  #[BS,?]->[BS,1]
+            W_fc1 = tf.get_variable('W_fc1', [flatten.shape[1].value, 1], initializer=tf.contrib.layers.xavier_initializer())
             b_fc1 = tf.get_variable('b_fc1', [1], initializer=tf.constant_initializer(0.))
             logits = tf.matmul(flatten, W_fc1) + b_fc1
 
@@ -258,10 +257,11 @@ class Image_translation_net(object):
 
     def build_graph(self):
         # placeholder
-        self.XA = tf.placeholder(tf.float32, [self.BS, 28, 28 ,3]) #[BS,W,H,C]
-        self.XB = tf.placeholder(tf.float32, [self.BS, 28, 28 ,3]) #[BS,W,H,C]
+        self.XA = tf.placeholder(tf.float32, [self.BS, 28, 28 ,3]) #[BS,W,H,C] mnist
+        XA_32 = tf.image.resize_bicubic(self.XA, [32, 32])
+        self.XB = tf.placeholder(tf.float32, [self.BS, 32, 32 ,3]) #[BS,W,H,C] svhn
         # net
-        pre_msA = self._encoder_pre(self.XA, 'encoder_A')
+        pre_msA = self._encoder_pre(XA_32, 'encoder_A')
         pre_msB = self._encoder_pre(self.XB, 'encoder_B')
 
         self.muA, self.sigmaA = self._encoder_S(pre_msA, 'encoder_S') # [BS,z_dim],#[BS,z_dim]
@@ -310,7 +310,7 @@ class Image_translation_net(object):
 
         #VAE_loss
         KL_lossA = 0.5 * tf.reduce_sum(tf.square(self.muA) + tf.square(self.sigmaA) - tf.log(1e-8 + tf.square(self.sigmaA)) - 1, [1])# [BS,z_dim]->[BS,1]
-        IO_lossA = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.RA_A, labels=self.XA), [1, 2, 3])# [BS,w,h,c]->[BS,1]
+        IO_lossA = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.RA_A, labels=XA_32), [1, 2, 3])# [BS,w,h,c]->[BS,1]
         VAE_lossA = tf.reduce_mean(self.L1*KL_lossA + self.L2*IO_lossA) # [1] #Optimize(EA,GA)
 
         KL_lossB = 0.5 * tf.reduce_sum(tf.square(self.muB) + tf.square(self.sigmaB) - tf.log(1e-8 + tf.square(self.sigmaB)) - 1, [1])# [BS,z_dim]->[BS,1]
@@ -332,7 +332,7 @@ class Image_translation_net(object):
 
         # Cycle_loss #Optimize(EA,GA,EB,GB)
         KL_lossC = 0.5 * tf.reduce_sum(tf.square(self.muC) + tf.square(self.sigmaC) - tf.log(1e-8 + tf.square(self.sigmaC)) - 1, [1])  # [BS,z_dim]->[BS,1]
-        CIO_lossA = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.RC, labels=self.XA), [1, 2, 3])# [BS,w,h,c]->[BS,1]
+        CIO_lossA = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.RC, labels=XA_32), [1, 2, 3])# [BS,w,h,c]->[BS,1]
         Cycle_lossA = tf.reduce_mean(self.L3*KL_lossA + self.L3*KL_lossC + self.L4*CIO_lossA) #[BS,1]->[1]
 
         KL_lossD = 0.5 * tf.reduce_sum(tf.square(self.muD) + tf.square(self.sigmaD) - tf.log(1e-8 + tf.square(self.sigmaD)) - 1, [1])  # [BS,z_dim]->[BS,1]
@@ -382,12 +382,16 @@ class Image_translation_net(object):
                 sess.run(svhn_iterator.initializer)
                 for epoch_step in range(150):
                     XA, labelA = mnist.train.next_batch(self.BS)
+
                     XB, labelB = sess.run(svhn_iterator.get_next())
                     print('########################################')
                     print(XA.shape)
                     print(labelA.shape)
                     print(XB.shape)
                     print(labelB.shape)
+
+                    #im = Image.fromarray(XA.astype("uint8"))
+
                     #train
                     _, sum_merge, loss, VAE_loss, GAN_loss, Cycle_loss = sess.run(
                         [self.optimizer, self.sum_merge, self.loss, self.VAE_loss, self.GAN_loss, self.Cycle_loss],
