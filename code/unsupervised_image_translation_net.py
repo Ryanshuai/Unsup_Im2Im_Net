@@ -408,16 +408,16 @@ class Image_translation_net(object):
                     if not os.path.exists(B2A_path):
                         os.makedirs(B2A_path)
                     XA, labelA = mnist.train.next_batch(32)
-                    XA = np.reshape(XA, [32, 28, 28, 1])
+                    XA_out = np.reshape(XA, [32, 28, 28, 1])
                     XB, labelB = sess.run(svhn_iterator.get_next())
                     RA_B, RB_A = sess.run([self.RA_B, self.RB_A],feed_dict={self.XA: XA, self.XB: XB})
-                    XA, XB, RA_B, RB_A = XA * 255.0, XB * 255.0, RA_B * 255.0, RB_A * 255.0
-                    XA.astype(np.uint8)
+                    XA_out, XB, RA_B, RB_A = XA_out * 255.0, XB * 255.0, RA_B * 255.0, RB_A * 255.0
+                    XA_out.astype(np.uint8)
                     XB.astype(np.uint8)
                     RA_B.astype(np.uint8)
                     RB_A.astype(np.uint8)
                     for i in range(self.BS):
-                        cv2.imwrite(A2B_path + '/A' + str(i) + '.jpg', XA[i])
+                        cv2.imwrite(A2B_path + '/A' + str(i) + '.jpg', XA_out[i])
                         cv2.imwrite(A2B_path + '/RB_A' + str(i) + '.jpg', RB_A[i])
                         cv2.imwrite(B2A_path + '/B' + str(i) + '.jpg', XB[i])
                         cv2.imwrite(B2A_path + '/RA_B' + str(i) + '.jpg', RA_B[i])
