@@ -354,7 +354,7 @@ class Image_translation_net(object):
 
 
     def train(self):
-        tf_sum_writer = tf.summary.FileWriter('logs')
+        tf_sum_writer = tf.summary.FileWriter(self.parent_path + 'logs/')
 
         saver = tf.train.Saver()
         tfModel_path = self.parent_path + 'tfModel/'
@@ -376,6 +376,7 @@ class Image_translation_net(object):
                 print('no_pre_model')
 
             tf_sum_writer.add_graph(sess.graph)
+
             global_step = 0
             for epoch in range(pre_model_epoch + 1, pre_model_epoch + 500):
                 sess.run(svhn_iterator.initializer)
@@ -401,15 +402,18 @@ class Image_translation_net(object):
 
                 if epoch % 1 == 0: # save images
                     A2B_path = self.parent_path + '/generated_image/epoch' + str(epoch) + '/A2B'
-                    B2A_path = self.parent_path + '/generated_image/epoch' + str(epoch) + '/A2B'
+                    B2A_path = self.parent_path + '/generated_image/epoch' + str(epoch) + '/B2A'
                     if not os.path.exists(A2B_path):
                         os.makedirs(A2B_path)
                     if not os.path.exists(B2A_path):
                         os.makedirs(B2A_path)
-                    XA, labelA = mnist.train.next_batch(self.BS)
+                    XA, labelA = mnist.train.next_batch(32)
+                    XA = np.reshape(XA, [32, 28, 28, 1])
                     XB, labelB = sess.run(svhn_iterator.get_next())
                     RA_B, RB_A = sess.run([self.RA_B, self.RB_A],feed_dict={self.XA: XA, self.XB: XB})
-                    RA_B, RB_A = RA_B * 255.0, RB_A * 255.0
+                    XA, XB, RA_B, RB_A = XA * 255.0, XB * 255.0, RA_B * 255.0, RB_A * 255.0
+                    XA.astype(np.uint8)
+                    XB.astype(np.uint8)
                     RA_B.astype(np.uint8)
                     RB_A.astype(np.uint8)
                     for i in range(self.BS):
