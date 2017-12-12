@@ -187,9 +187,10 @@ class Image_translation_net(object):
             # deconv5  # [BS,32,32,64]->[BS,32,32,3]
             W_deconv5 = tf.get_variable('W_deconv5', [5, 5, 3, 64], initializer=tf.contrib.layers.xavier_initializer())
             z_deconv5 = tf.nn.conv2d_transpose(a_deconv4, W_deconv5, [self.BS, 32, 32, 3], [1, 1, 1, 1])
+            a_deconv5 = tf.nn.sigmoid(z_deconv5)
 
             self.g_variables = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=name)
-            return z_deconv5
+            return a_deconv5
 
 
     def _discriminator_pre(self, recon_X, name, reuse=tf.AUTO_REUSE):
@@ -308,11 +309,11 @@ class Image_translation_net(object):
 
         #VAE_loss
         KL_lossA = 0.5 * tf.reduce_sum(tf.square(self.muA) + tf.square(self.sigmaA) - tf.log(1e-8 + tf.square(self.sigmaA)) - 1, [1])# [BS,z_dim]->[BS,1]
-        IO_lossA = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.RA_A, labels=XA_32), [1, 2, 3])# [BS,w,h,c]->[BS,1]
+        IO_lossA = tf.reduce_sum(np.abs(XA_32 - self.RA_A), [1, 2, 3])# [BS,w,h,c]->[BS,1]
         VAE_lossA = tf.reduce_mean(self.L1*KL_lossA + self.L2*IO_lossA) # [1] #Optimize(EA,GA)
 
         KL_lossB = 0.5 * tf.reduce_sum(tf.square(self.muB) + tf.square(self.sigmaB) - tf.log(1e-8 + tf.square(self.sigmaB)) - 1, [1])# [BS,z_dim]->[BS,1]
-        IO_lossB = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.RB_B, labels=self.XB), [1, 2, 3])# [BS,w,h,c]->[BS,1]
+        IO_lossB = tf.reduce_sum(np.abs(self.XB - self.RB_B), [1, 2, 3])# [BS,w,h,c]->[BS,1]
         VAE_lossB = tf.reduce_mean(self.L1*KL_lossB + self.L2*IO_lossB) # [1] #Optimize(EB,GB)
 
         self.VAE_loss = VAE_lossA + VAE_lossB # [1]
@@ -330,11 +331,11 @@ class Image_translation_net(object):
 
         # Cycle_loss #Optimize(EA,GA,EB,GB)
         KL_lossC = 0.5 * tf.reduce_sum(tf.square(self.muC) + tf.square(self.sigmaC) - tf.log(1e-8 + tf.square(self.sigmaC)) - 1, [1])  # [BS,z_dim]->[BS,1]
-        CIO_lossA = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.RC, labels=XA_32), [1, 2, 3])# [BS,w,h,c]->[BS,1]
+        CIO_lossA = tf.reduce_sum(np.abs(XA_32 - self.RC), [1, 2, 3])# [BS,w,h,c]->[BS,1]
         Cycle_lossA = tf.reduce_mean(self.L3*KL_lossA + self.L3*KL_lossC + self.L4*CIO_lossA) #[BS,1]->[1]
 
         KL_lossD = 0.5 * tf.reduce_sum(tf.square(self.muD) + tf.square(self.sigmaD) - tf.log(1e-8 + tf.square(self.sigmaD)) - 1, [1])  # [BS,z_dim]->[BS,1]
-        CIO_lossB = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.RD, labels=self.XB), [1, 2, 3])# [BS,w,h,c]->[BS,1]
+        CIO_lossB = tf.reduce_sum(np.abs(self.XB - self.RD), [1, 2, 3])# [BS,w,h,c]->[BS,1]
         Cycle_lossB = tf.reduce_mean(self.L3*KL_lossB + self.L3*KL_lossD + self.L4*CIO_lossB) #[BS,1]->[1]
 
         self.Cycle_loss = Cycle_lossA + Cycle_lossB
@@ -343,7 +344,7 @@ class Image_translation_net(object):
         self.loss = self.VAE_loss + self.GAN_loss + self.Cycle_loss # [1]
 
         # optimizers
-        self.optimizer = tf.train.GradientDescentOptimizer(learning_rate=0.001).minimize(self.loss)
+        self.optimizer = tf.train.AdamOptimizer(learning_rate=0.0001).minimize(self.loss)
 
         #tensorboard
         self.sum_VAE_loss = tf.summary.scalar("VAE_loss", self.VAE_loss)
@@ -354,10 +355,10 @@ class Image_translation_net(object):
 
 
     def train(self):
-        tf_sum_writer = tf.summary.FileWriter(self.parent_path + 'logs/')
+        tf_sum_writer = tf.summary.FileWriter(self.parent_path + '/logs/')
 
         saver = tf.train.Saver()
-        tfModel_path = self.parent_path + 'tfModel/'
+        tfModel_path = self.parent_path + '/tfModel/'
         ckpt = tf.train.get_checkpoint_state(checkpoint_dir=tfModel_path)
 
         svhn_dataset, mnist = self._get_dataset()
