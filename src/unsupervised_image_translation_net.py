@@ -310,7 +310,6 @@ class Image_translation_net(object):
         #VAE_loss
         KL_lossA = 0.5 * tf.reduce_sum(tf.square(self.muA) + tf.square(self.sigmaA) - tf.log(1e-8 + tf.square(self.sigmaA)) - 1, [1])# [BS,z_dim]->[BS,1]
         #IO_lossA = tf.reduce_sum(np.abs(XA_32 - self.RA_A), [1, 2, 3])# [BS,w,h,c]->[BS,1]
-        tf.nn.sigmoid_cross_entropy_with_logits()
         IO_lossA = tf.reduce_sum(- XA_32 * tf.log(self.RA_A) - (1 - XA_32) * tf.log(1 - self.RA_A), [1, 2, 3])  # [BS,W,H,C]->[BS,1]
         VAE_lossA = tf.reduce_mean(self.L1*KL_lossA + self.L2*IO_lossA) # [1] #Optimize(EA,GA)
 
