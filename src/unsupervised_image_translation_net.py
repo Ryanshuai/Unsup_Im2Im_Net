@@ -310,12 +310,13 @@ class Image_translation_net(object):
         #VAE_loss
         KL_lossA = 0.5 * tf.reduce_sum(tf.square(self.muA) + tf.square(self.sigmaA) - tf.log(1e-8 + tf.square(self.sigmaA)) - 1, [1])# [BS,z_dim]->[BS,1]
         #IO_lossA = tf.reduce_sum(np.abs(XA_32 - self.RA_A), [1, 2, 3])# [BS,w,h,c]->[BS,1]
-        IO_lossA = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.RA_A, labels=XA_32),[1, 2, 3])  # [BS,w,h,c]->[BS,1]
+        tf.nn.sigmoid_cross_entropy_with_logits()
+        IO_lossA = tf.reduce_sum(- XA_32 * tf.log(self.RA_A) - (1 - XA_32) * tf.log(1 - self.RA_A), [1, 2, 3])  # [BS,W,H,C]->[BS,1]
         VAE_lossA = tf.reduce_mean(self.L1*KL_lossA + self.L2*IO_lossA) # [1] #Optimize(EA,GA)
 
         KL_lossB = 0.5 * tf.reduce_sum(tf.square(self.muB) + tf.square(self.sigmaB) - tf.log(1e-8 + tf.square(self.sigmaB)) - 1, [1])# [BS,z_dim]->[BS,1]
         #IO_lossB = tf.reduce_sum(np.abs(self.XB - self.RB_B), [1, 2, 3])# [BS,w,h,c]->[BS,1]
-        IO_lossB = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.RB_B, labels=self.XB),[1, 2, 3])  # [BS,w,h,c]->[BS,1]
+        IO_lossB = tf.reduce_sum(- self.XB * tf.log(self.RB_B) - (1 - self.XB) * tf.log(1 - self.RB_B), [1, 2, 3])  # [BS,W,H,C]->[BS,1]
         VAE_lossB = tf.reduce_mean(self.L1*KL_lossB + self.L2*IO_lossB) # [1] #Optimize(EB,GB)
 
         self.VAE_loss = VAE_lossA + VAE_lossB # [1]
@@ -334,12 +335,12 @@ class Image_translation_net(object):
         # Cycle_loss #Optimize(EA,GA,EB,GB)
         KL_lossC = 0.5 * tf.reduce_sum(tf.square(self.muC) + tf.square(self.sigmaC) - tf.log(1e-8 + tf.square(self.sigmaC)) - 1, [1])  # [BS,z_dim]->[BS,1]
         #CIO_lossA = tf.reduce_sum(np.abs(XA_32 - self.RC), [1, 2, 3])# [BS,w,h,c]->[BS,1]
-        CIO_lossA = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.RC, labels=XA_32),[1, 2, 3])  # [BS,w,h,c]->[BS,1]
+        CIO_lossA = tf.reduce_sum(- XA_32 * tf.log(self.RC) - (1 - XA_32) * tf.log(1 - self.RC), [1, 2, 3])  # [BS,W,H,C]->[BS,1]
         Cycle_lossA = tf.reduce_mean(self.L3*KL_lossA + self.L3*KL_lossC + self.L4*CIO_lossA) #[BS,1]->[1]
 
         KL_lossD = 0.5 * tf.reduce_sum(tf.square(self.muD) + tf.square(self.sigmaD) - tf.log(1e-8 + tf.square(self.sigmaD)) - 1, [1])  # [BS,z_dim]->[BS,1]
         #CIO_lossB = tf.reduce_sum(np.abs(self.XB - self.RD), [1, 2, 3])# [BS,w,h,c]->[BS,1]
-        CIO_lossB = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.RD, labels=self.XB),[1, 2, 3])  # [BS,w,h,c]->[BS,1]
+        CIO_lossB = tf.reduce_sum(- self.XB * tf.log(self.RD) - (1 - self.XB) * tf.log(1 - self.RD), [1, 2, 3])  # [BS,W,H,C]->[BS,1]
         Cycle_lossB = tf.reduce_mean(self.L3*KL_lossB + self.L3*KL_lossD + self.L4*CIO_lossB) #[BS,1]->[1]
 
         self.Cycle_loss = Cycle_lossA + Cycle_lossB
