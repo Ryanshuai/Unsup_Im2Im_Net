@@ -381,7 +381,7 @@ class Image_translation_net(object):
             global_step = 0
             for epoch in range(pre_model_epoch + 1, pre_model_epoch + 500):
                 sess.run(svhn_iterator.initializer)
-                for epoch_step in range(1500):
+                for epoch_step in range(2280):
                     XA, labelA = mnist.train.next_batch(self.BS)
                     XB, labelB = sess.run(svhn_iterator.get_next())
                     #train
