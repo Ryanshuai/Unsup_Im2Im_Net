@@ -309,11 +309,13 @@ class Image_translation_net(object):
 
         #VAE_loss
         KL_lossA = 0.5 * tf.reduce_sum(tf.square(self.muA) + tf.square(self.sigmaA) - tf.log(1e-8 + tf.square(self.sigmaA)) - 1, [1])# [BS,z_dim]->[BS,1]
-        IO_lossA = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits( logits = self.RA_A, labels = XA_32 ), [1, 2, 3])# [BS,w,h,c]->[BS,1]
+        #IO_lossA = tf.reduce_sum(np.abs(XA_32 - self.RA_A), [1, 2, 3])# [BS,w,h,c]->[BS,1]
+        IO_lossA = tf.reduce_sum(- XA_32 * tf.log(self.RA_A) - (1 - XA_32) * tf.log(1 - self.RA_A), [1, 2, 3])  # [BS,W,H,C]->[BS,1]
         VAE_lossA = tf.reduce_mean(self.L1*KL_lossA + self.L2*IO_lossA) # [1] #Optimize(EA,GA)
 
         KL_lossB = 0.5 * tf.reduce_sum(tf.square(self.muB) + tf.square(self.sigmaB) - tf.log(1e-8 + tf.square(self.sigmaB)) - 1, [1])# [BS,z_dim]->[BS,1]
-        IO_lossB = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(logits = self.RB_B, labels = self.XB ), [1, 2, 3])# [BS,w,h,c]->[BS,1]
+        #IO_lossB = tf.reduce_sum(np.abs(self.XB - self.RB_B), [1, 2, 3])# [BS,w,h,c]->[BS,1]
+        IO_lossB = tf.reduce_sum(- self.XB * tf.log(self.RB_B) - (1 - self.XB) * tf.log(1 - self.RB_B), [1, 2, 3])  # [BS,W,H,C]->[BS,1]
         VAE_lossB = tf.reduce_mean(self.L1*KL_lossB + self.L2*IO_lossB) # [1] #Optimize(EB,GB)
 
         self.VAE_loss = VAE_lossA + VAE_lossB # [1]
@@ -331,11 +333,13 @@ class Image_translation_net(object):
 
         # Cycle_loss #Optimize(EA,GA,EB,GB)
         KL_lossC = 0.5 * tf.reduce_sum(tf.square(self.muC) + tf.square(self.sigmaC) - tf.log(1e-8 + tf.square(self.sigmaC)) - 1, [1])  # [BS,z_dim]->[BS,1]
-        CIO_lossA = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.RC, labels= XA_32), [1, 2, 3])# [BS,w,h,c]->[BS,1]
+        #CIO_lossA = tf.reduce_sum(np.abs(XA_32 - self.RC), [1, 2, 3])# [BS,w,h,c]->[BS,1]
+        CIO_lossA = tf.reduce_sum(- XA_32 * tf.log(self.RC) - (1 - XA_32) * tf.log(1 - self.RC), [1, 2, 3])  # [BS,W,H,C]->[BS,1]
         Cycle_lossA = tf.reduce_mean(self.L3*KL_lossA + self.L3*KL_lossC + self.L4*CIO_lossA) #[BS,1]->[1]
 
         KL_lossD = 0.5 * tf.reduce_sum(tf.square(self.muD) + tf.square(self.sigmaD) - tf.log(1e-8 + tf.square(self.sigmaD)) - 1, [1])  # [BS,z_dim]->[BS,1]
-        CIO_lossB = tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.RD, labels=self.XB), [1, 2, 3])# [BS,w,h,c]->[BS,1]
+        #CIO_lossB = tf.reduce_sum(np.abs(self.XB - self.RD), [1, 2, 3])# [BS,w,h,c]->[BS,1]
+        CIO_lossB = tf.reduce_sum(- self.XB * tf.log(self.RD) - (1 - self.XB) * tf.log(1 - self.RD), [1, 2, 3])  # [BS,W,H,C]->[BS,1]
         Cycle_lossB = tf.reduce_mean(self.L3*KL_lossB + self.L3*KL_lossD + self.L4*CIO_lossB) #[BS,1]->[1]
 
         self.Cycle_loss = Cycle_lossA + Cycle_lossB
@@ -364,9 +368,7 @@ class Image_translation_net(object):
         svhn_dataset, mnist = self._get_dataset()
         svhn_iterator = svhn_dataset.make_initializable_iterator()
 
-        tf_config = tf.ConfigProto()
-        tf_config.gpu_options.allow_growth = True
-        with tf.Session(config=tf_config) as sess:
+        with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
             sess.run(tf.local_variables_initializer())
             if ckpt and ckpt.model_checkpoint_path:
@@ -397,13 +399,13 @@ class Image_translation_net(object):
                     print('epoch:', epoch, 'epoch_step:', epoch_step, 'global_step:', global_step)
                     global_step = global_step + 1
 
-                if epoch % 5 == 0:  # save model
+                if epoch % 5 == 0: # save model
                     print('---------------------')
                     if not os.path.exists(tfModel_path):
                         os.makedirs(tfModel_path)
                     saver.save(sess, tfModel_path + '/epoch' + str(epoch))
 
-                if epoch % 1 == 0:  # save images
+                if epoch % 1 == 0: # save images
                     A2B_path = self.parent_path + '/generated_image/epoch' + str(epoch) + '/A2B'
                     B2A_path = self.parent_path + '/generated_image/epoch' + str(epoch) + '/B2A'
                     if not os.path.exists(A2B_path):
@@ -413,7 +415,7 @@ class Image_translation_net(object):
                     XA, labelA = mnist.train.next_batch(32)
                     XA_out = np.reshape(XA, [32, 28, 28, 1])
                     XB, labelB = sess.run(svhn_iterator.get_next())
-                    RA_B, RB_A = sess.run([self.RA_B, self.RB_A], feed_dict={self.XA: XA, self.XB: XB})
+                    RA_B, RB_A = sess.run([self.RA_B, self.RB_A],feed_dict={self.XA: XA, self.XB: XB})
                     XA_out, XB, RA_B, RB_A = XA_out * 255.0, XB * 255.0, RA_B * 255.0, RB_A * 255.0
                     XA_out.astype(np.uint8)
                     XB.astype(np.uint8)
@@ -424,8 +426,6 @@ class Image_translation_net(object):
                         cv2.imwrite(A2B_path + '/RB_A' + str(i) + '.jpg', RB_A[i])
                         cv2.imwrite(B2A_path + '/B' + str(i) + '.jpg', XB[i])
                         cv2.imwrite(B2A_path + '/RA_B' + str(i) + '.jpg', RA_B[i])
-
-
 
 
 if __name__ == "__main__":
