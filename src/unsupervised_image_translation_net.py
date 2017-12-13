@@ -364,7 +364,9 @@ class Image_translation_net(object):
         svhn_dataset, mnist = self._get_dataset()
         svhn_iterator = svhn_dataset.make_initializable_iterator()
 
-        with tf.Session() as sess:
+        tf_config = tf.ConfigProto()
+        tf_config.gpu_options.allow_growth = True
+        with tf.Session(config=tf_config) as sess:
             sess.run(tf.global_variables_initializer())
             sess.run(tf.local_variables_initializer())
             if ckpt and ckpt.model_checkpoint_path:
@@ -381,7 +383,7 @@ class Image_translation_net(object):
             global_step = 0
             for epoch in range(pre_model_epoch + 1, pre_model_epoch + 500):
                 sess.run(svhn_iterator.initializer)
-                for epoch_step in range(73200):
+                for epoch_step in range(2280):
                     XA, labelA = mnist.train.next_batch(self.BS)
                     XB, labelB = sess.run(svhn_iterator.get_next())
                     #train
@@ -395,33 +397,33 @@ class Image_translation_net(object):
                     print('epoch:', epoch, 'epoch_step:', epoch_step, 'global_step:', global_step)
                     global_step = global_step + 1
 
-                    if global_step % 5000 == 0:  # save model
-                        print('---------------------')
-                        if not os.path.exists(tfModel_path):
-                            os.makedirs(tfModel_path)
-                        saver.save(sess, tfModel_path + '/epoch' + str(epoch) + '_' + str(epoch_step))
+                if epoch % 5 == 0:  # save model
+                    print('---------------------')
+                    if not os.path.exists(tfModel_path):
+                        os.makedirs(tfModel_path)
+                    saver.save(sess, tfModel_path + '/epoch' + str(epoch))
 
-                    if global_step % 5000 == 0:  # save images
-                        A2B_path = self.parent_path + '/generated_image/epoch' + str(epoch) + '_' + str(epoch_step)+ '/A2B'
-                        B2A_path = self.parent_path + '/generated_image/epoch' + str(epoch) + '_' + str(epoch_step) + '/B2A'
-                        if not os.path.exists(A2B_path):
-                            os.makedirs(A2B_path)
-                        if not os.path.exists(B2A_path):
-                            os.makedirs(B2A_path)
-                        XA, labelA = mnist.train.next_batch(32)
-                        XA_out = np.reshape(XA, [32, 28, 28, 1])
-                        XB, labelB = sess.run(svhn_iterator.get_next())
-                        RA_B, RB_A = sess.run([self.RA_B, self.RB_A], feed_dict={self.XA: XA, self.XB: XB})
-                        XA_out, XB, RA_B, RB_A = XA_out * 255.0, XB * 255.0, RA_B * 255.0, RB_A * 255.0
-                        XA_out.astype(np.uint8)
-                        XB.astype(np.uint8)
-                        RA_B.astype(np.uint8)
-                        RB_A.astype(np.uint8)
-                        for i in range(self.BS):
-                            cv2.imwrite(A2B_path + '/A' + str(i) + '.jpg', XA_out[i])
-                            cv2.imwrite(A2B_path + '/RB_A' + str(i) + '.jpg', RB_A[i])
-                            cv2.imwrite(B2A_path + '/B' + str(i) + '.jpg', XB[i])
-                            cv2.imwrite(B2A_path + '/RA_B' + str(i) + '.jpg', RA_B[i])
+                if epoch % 1 == 0:  # save images
+                    A2B_path = self.parent_path + '/generated_image/epoch' + str(epoch) + '/A2B'
+                    B2A_path = self.parent_path + '/generated_image/epoch' + str(epoch) + '/B2A'
+                    if not os.path.exists(A2B_path):
+                        os.makedirs(A2B_path)
+                    if not os.path.exists(B2A_path):
+                        os.makedirs(B2A_path)
+                    XA, labelA = mnist.train.next_batch(32)
+                    XA_out = np.reshape(XA, [32, 28, 28, 1])
+                    XB, labelB = sess.run(svhn_iterator.get_next())
+                    RA_B, RB_A = sess.run([self.RA_B, self.RB_A], feed_dict={self.XA: XA, self.XB: XB})
+                    XA_out, XB, RA_B, RB_A = XA_out * 255.0, XB * 255.0, RA_B * 255.0, RB_A * 255.0
+                    XA_out.astype(np.uint8)
+                    XB.astype(np.uint8)
+                    RA_B.astype(np.uint8)
+                    RB_A.astype(np.uint8)
+                    for i in range(self.BS):
+                        cv2.imwrite(A2B_path + '/A' + str(i) + '.jpg', XA_out[i])
+                        cv2.imwrite(A2B_path + '/RB_A' + str(i) + '.jpg', RB_A[i])
+                        cv2.imwrite(B2A_path + '/B' + str(i) + '.jpg', XB[i])
+                        cv2.imwrite(B2A_path + '/RA_B' + str(i) + '.jpg', RA_B[i])
 
 
 if __name__ == "__main__":
