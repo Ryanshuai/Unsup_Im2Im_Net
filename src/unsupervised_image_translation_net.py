@@ -425,6 +425,6 @@ class Image_translation_net(object):
 
 
 if __name__ == "__main__":
-    vae = Image_translation_net(32, 100)
-    vae.build_graph()
-    vae.train()
+    net = Image_translation_net(32, 100)
+    net.build_graph()
+    net.train()
