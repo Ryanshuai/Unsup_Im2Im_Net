@@ -54,7 +54,7 @@ class Image_translation_net(object):
             # conv1  #[BS,32,32,3]->[BS,16,16,64]
             W_conv1 = tf.get_variable('W_conv1', [5, 5, 3, 64], initializer=tf.contrib.layers.xavier_initializer_conv2d())
             b_conv1 = tf.get_variable('b_conv1', initializer=tf.constant(0.))
-            z_conv1 = tf.nn.conv2d(X / 255, W_conv1, strides=[1, 2, 2, 1], padding='SAME') + b_conv1
+            z_conv1 = tf.nn.conv2d(X, W_conv1, strides=[1, 2, 2, 1], padding='SAME') + b_conv1
             mean_conv1, variance_conv1 = tf.nn.moments(z_conv1, axes=[0, 1, 2])
             offset_conv1 = tf.get_variable('offset_conv1', initializer=tf.zeros([64]))
             scale_conv1 = tf.get_variable('scale_conv1', initializer=tf.ones([64]))
@@ -193,12 +193,12 @@ class Image_translation_net(object):
             return a_deconv5
 
 
-    def _discriminator_pre(self, recon_X, name, reuse=tf.AUTO_REUSE):
+    def _discriminator_pre(self, X, name, reuse=tf.AUTO_REUSE):
         with tf.name_scope(name), tf.variable_scope(name, reuse=reuse):
             # conv1  #[BS,32,32,3]->[BS,16,16,64]
             W_conv1 = tf.get_variable('W_conv1', [5, 5, 3, 64], initializer=tf.contrib.layers.xavier_initializer())
             b_conv1 = tf.get_variable('b_conv1', initializer=tf.constant(0.))
-            z_conv1 = tf.nn.conv2d(recon_X / 255, W_conv1, strides=[1, 2, 2, 1], padding='SAME') + b_conv1
+            z_conv1 = tf.nn.conv2d(X, W_conv1, strides=[1, 2, 2, 1], padding='SAME') + b_conv1
             mean_conv1, variance_conv1 = tf.nn.moments(z_conv1, axes=[0, 1, 2])
             offset_conv1 = tf.get_variable('offset_conv1', initializer=tf.zeros([64]))
             scale_conv1 = tf.get_variable('scale_conv1', initializer=tf.ones([64]))
