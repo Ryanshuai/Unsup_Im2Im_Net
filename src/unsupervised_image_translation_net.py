@@ -348,7 +348,8 @@ class Image_translation_net(object):
         self.loss = self.VAE_loss + self.GAN_loss + self.Cycle_loss # [1]
 
         # optimizers
-        self.optimizer = tf.train.AdamOptimizer(learning_rate=0.0001).minimize(self.loss)
+        self.optimize_d = tf.train.AdamOptimizer(learning_rate=0.0001).minimize(-self.loss, var_list=self.d_variables)
+        self.optimize_ge = tf.train.AdamOptimizer(learning_rate=0.0001).minimize(self.loss, var_list=[self.g_variables, self.e_variables])
 
         #tensorboard
         self.sum_VAE_loss = tf.summary.scalar("VAE_loss", self.VAE_loss)
@@ -390,7 +391,10 @@ class Image_translation_net(object):
                     XB, labelB = sess.run(svhn_iterator.get_next())
                     #train
                     _, sum_merge, loss, VAE_loss, GAN_loss, Cycle_loss = sess.run(
-                        [self.optimizer, self.sum_merge, self.loss, self.VAE_loss, self.GAN_loss, self.Cycle_loss],
+                        [self.optimize_d, self.sum_merge, self.loss, self.VAE_loss, self.GAN_loss, self.Cycle_loss],
+                        feed_dict={self.XA: XA, self.XB: XB})
+                    _, sum_merge, loss, VAE_loss, GAN_loss, Cycle_loss = sess.run(
+                        [self.optimize_ge, self.sum_merge, self.loss, self.VAE_loss, self.GAN_loss, self.Cycle_loss],
                         feed_dict={self.XA: XA, self.XB: XB})
 
                     if epoch_step % 10 == 0: # tensorboard
