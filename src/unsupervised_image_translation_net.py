@@ -321,11 +321,11 @@ class Image_translation_net(object):
         self.VAE_loss = VAE_lossA + VAE_lossB # [1]
 
         #GAN_loss
-        GAN_lossA_A = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=yA_A, labels=tf.ones_like(yA_A))) #real
+        GAN_lossA_A = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=XA_32, labels=tf.ones_like(XA_32))) #real
         GAN_lossA_B = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=yA_B, labels=tf.zeros_like(yA_B))) #fake
         GAN_lossA = GAN_lossA_A + GAN_lossA_B  # [1] #Optimize(EA,GA,DA)
 
-        GAN_lossB_B = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=yB_B, labels=tf.ones_like(yB_B)))  #real
+        GAN_lossB_B = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.XB, labels=tf.ones_like(self.XB)))  #real
         GAN_lossB_A = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=yB_A, labels=tf.zeros_like(yB_A)))  #fake
         GAN_lossB = GAN_lossB_B + GAN_lossB_A  # [1] #Optimize(EB,GB,DB)
 
