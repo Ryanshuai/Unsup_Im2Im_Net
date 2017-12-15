@@ -307,49 +307,62 @@ class Image_translation_net(object):
         self.RC = self._generator_end(sRC, 'generator_A') #RA_(RB_A)
         self.RD = self._generator_end(sRD, 'generator_B') #RB_(RA_B)
 
-        #VAE_loss
-        KL_lossA = 0.5 * tf.reduce_sum(tf.square(self.muA) + tf.square(self.sigmaA) - tf.log(1e-8 + tf.square(self.sigmaA)) - 1, [1])# [BS,z_dim]->[BS,1]
-        IO_lossA = tf.reduce_sum(np.abs(XA_32 - self.RA_A), [1, 2, 3])# [BS,w,h,c]->[BS,1]
-        #IO_lossA = tf.reduce_sum(- XA_32 * tf.log(self.RA_A) - (1 - XA_32) * tf.log(1 - self.RA_A), [1, 2, 3])  # [BS,W,H,C]->[BS,1]
-        VAE_lossA = tf.reduce_mean(self.L1*KL_lossA + self.L2*IO_lossA) # [1] #Optimize(EA,GA)
+        with tf.name_scope('gan_loss'):
+            #VAE_loss
+            KL_lossA = 0.5 * tf.reduce_sum(tf.square(self.muA) + tf.square(self.sigmaA) - tf.log(1e-8 + tf.square(self.sigmaA)) - 1, [1])# [BS,z_dim]->[BS,1]
+            IO_lossA = tf.reduce_sum(np.abs(XA_32 - self.RA_A), [1, 2, 3])# [BS,w,h,c]->[BS,1]
+            #IO_lossA = tf.reduce_sum(- XA_32 * tf.log(self.RA_A) - (1 - XA_32) * tf.log(1 - self.RA_A), [1, 2, 3])  # [BS,W,H,C]->[BS,1]
+            VAE_lossA = tf.reduce_mean(self.L1*KL_lossA + self.L2*IO_lossA) # [1] #Optimize(EA,GA)
 
-        KL_lossB = 0.5 * tf.reduce_sum(tf.square(self.muB) + tf.square(self.sigmaB) - tf.log(1e-8 + tf.square(self.sigmaB)) - 1, [1])# [BS,z_dim]->[BS,1]
-        IO_lossB = tf.reduce_sum(np.abs(self.XB - self.RB_B), [1, 2, 3])# [BS,w,h,c]->[BS,1]
-        #IO_lossB = tf.reduce_sum(- self.XB * tf.log(self.RB_B) - (1 - self.XB) * tf.log(1 - self.RB_B), [1, 2, 3])  # [BS,W,H,C]->[BS,1]
-        VAE_lossB = tf.reduce_mean(self.L1*KL_lossB + self.L2*IO_lossB) # [1] #Optimize(EB,GB)
+            KL_lossB = 0.5 * tf.reduce_sum(tf.square(self.muB) + tf.square(self.sigmaB) - tf.log(1e-8 + tf.square(self.sigmaB)) - 1, [1])# [BS,z_dim]->[BS,1]
+            IO_lossB = tf.reduce_sum(np.abs(self.XB - self.RB_B), [1, 2, 3])# [BS,w,h,c]->[BS,1]
+            #IO_lossB = tf.reduce_sum(- self.XB * tf.log(self.RB_B) - (1 - self.XB) * tf.log(1 - self.RB_B), [1, 2, 3])  # [BS,W,H,C]->[BS,1]
+            VAE_lossB = tf.reduce_mean(self.L1*KL_lossB + self.L2*IO_lossB) # [1] #Optimize(EB,GB)
 
-        self.VAE_loss = VAE_lossA + VAE_lossB # [1]
+            self.VAE_loss = VAE_lossA + VAE_lossB # [1]
 
-        #GAN_loss
-        GAN_lossA_A = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=XA_32, labels=tf.ones_like(XA_32))) #real
-        GAN_lossA_B = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=yA_B, labels=tf.zeros_like(yA_B))) #fake
-        GAN_lossA = GAN_lossA_A + GAN_lossA_B  # [1] #Optimize(EA,GA,DA)
+            #GAN_loss
+            GAN_lossA = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=yA_B, labels=tf.ones_like(yA_B)))
 
-        GAN_lossB_B = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.XB, labels=tf.ones_like(self.XB)))  #real
-        GAN_lossB_A = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=yB_A, labels=tf.zeros_like(yB_A)))  #fake
-        GAN_lossB = GAN_lossB_B + GAN_lossB_A  # [1] #Optimize(EB,GB,DB)
+            GAN_lossB = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=yB_A, labels=tf.ones_like(yB_A)))
 
-        self.GAN_loss = self.L0*(GAN_lossA + GAN_lossB) # [1]
+            self.GAN_loss = self.L0*(GAN_lossA + GAN_lossB) # [1]
 
-        # Cycle_loss #Optimize(EA,GA,EB,GB)
-        KL_lossC = 0.5 * tf.reduce_sum(tf.square(self.muC) + tf.square(self.sigmaC) - tf.log(1e-8 + tf.square(self.sigmaC)) - 1, [1])  # [BS,z_dim]->[BS,1]
-        CIO_lossA = tf.reduce_sum(np.abs(XA_32 - self.RC), [1, 2, 3])# [BS,w,h,c]->[BS,1]
-        #CIO_lossA = tf.reduce_sum(- XA_32 * tf.log(self.RC) - (1 - XA_32) * tf.log(1 - self.RC), [1, 2, 3])  # [BS,W,H,C]->[BS,1]
-        Cycle_lossA = tf.reduce_mean(self.L3*KL_lossA + self.L3*KL_lossC + self.L4*CIO_lossA) #[BS,1]->[1]
+            # Cycle_loss #Optimize(EA,GA,EB,GB)
+            KL_lossC = 0.5 * tf.reduce_sum(tf.square(self.muC) + tf.square(self.sigmaC) - tf.log(1e-8 + tf.square(self.sigmaC)) - 1, [1])  # [BS,z_dim]->[BS,1]
+            CIO_lossA = tf.reduce_sum(np.abs(XA_32 - self.RC), [1, 2, 3])# [BS,w,h,c]->[BS,1]
+            #CIO_lossA = tf.reduce_sum(- XA_32 * tf.log(self.RC) - (1 - XA_32) * tf.log(1 - self.RC), [1, 2, 3])  # [BS,W,H,C]->[BS,1]
+            Cycle_lossA = tf.reduce_mean(self.L3*KL_lossA + self.L3*KL_lossC + self.L4*CIO_lossA) #[BS,1]->[1]
 
-        KL_lossD = 0.5 * tf.reduce_sum(tf.square(self.muD) + tf.square(self.sigmaD) - tf.log(1e-8 + tf.square(self.sigmaD)) - 1, [1])  # [BS,z_dim]->[BS,1]
-        CIO_lossB = tf.reduce_sum(np.abs(self.XB - self.RD), [1, 2, 3])# [BS,w,h,c]->[BS,1]
-        #CIO_lossB = tf.reduce_sum(- self.XB * tf.log(self.RD) - (1 - self.XB) * tf.log(1 - self.RD), [1, 2, 3])  # [BS,W,H,C]->[BS,1]
-        Cycle_lossB = tf.reduce_mean(self.L3*KL_lossB + self.L3*KL_lossD + self.L4*CIO_lossB) #[BS,1]->[1]
+            KL_lossD = 0.5 * tf.reduce_sum(tf.square(self.muD) + tf.square(self.sigmaD) - tf.log(1e-8 + tf.square(self.sigmaD)) - 1, [1])  # [BS,z_dim]->[BS,1]
+            CIO_lossB = tf.reduce_sum(np.abs(self.XB - self.RD), [1, 2, 3])# [BS,w,h,c]->[BS,1]
+            #CIO_lossB = tf.reduce_sum(- self.XB * tf.log(self.RD) - (1 - self.XB) * tf.log(1 - self.RD), [1, 2, 3])  # [BS,W,H,C]->[BS,1]
+            Cycle_lossB = tf.reduce_mean(self.L3*KL_lossB + self.L3*KL_lossD + self.L4*CIO_lossB) #[BS,1]->[1]
 
-        self.Cycle_loss = Cycle_lossA + Cycle_lossB
+            self.Cycle_loss = Cycle_lossA + Cycle_lossB
 
-        #loss
-        self.loss = self.VAE_loss + self.GAN_loss + self.Cycle_loss # [1]
+            #loss
+            self.gan_total_loss = self.VAE_loss + self.GAN_loss + self.Cycle_loss # [1]
+
+
+        with tf.name_scope('dis_loss'):
+            DIS_loss_Areal = tf.reduce_mean(
+                tf.nn.sigmoid_cross_entropy_with_logits(logits=XA_32, labels=tf.ones_like(XA_32)))  # real
+            DIS_loss_Afake = tf.reduce_mean(
+                tf.nn.sigmoid_cross_entropy_with_logits(logits=yA_B, labels=tf.zeros_like(yA_B)))  # fake
+            DIS_lossA = DIS_loss_Areal + DIS_loss_Afake  # [1] #Optimize(EA,GA,DA)
+
+            DIS_loss_Breal = tf.reduce_mean(
+                tf.nn.sigmoid_cross_entropy_with_logits(logits=self.XB, labels=tf.ones_like(self.XB)))  # real
+            DIS_loss_Bfake = tf.reduce_mean(
+                tf.nn.sigmoid_cross_entropy_with_logits(logits=yB_A, labels=tf.zeros_like(yB_A)))  # fake
+            DIS_lossB = DIS_loss_Breal + DIS_loss_Bfake  # [1] #Optimize(EB,GB,DB)
+
+            self.dis_total_loss = self.L0 * (DIS_lossA + DIS_lossB)  # [1]
 
         # optimizers
-        self.optimize_d = tf.train.AdamOptimizer(learning_rate=0.0001).minimize(-self.loss, var_list=self.d_variables)
-        self.optimize_ge = tf.train.AdamOptimizer(learning_rate=0.0001).minimize(self.loss, var_list=[self.g_variables, self.e_variables])
+        self.optimize_d = tf.train.AdamOptimizer(learning_rate=0.0001).minimize(self.dis_total_loss, var_list=self.d_variables)
+        self.optimize_ge = tf.train.AdamOptimizer(learning_rate=0.0001).minimize(self.gan_total_loss, var_list=[self.g_variables, self.e_variables])
 
         #tensorboard
         self.sum_VAE_loss = tf.summary.scalar("VAE_loss", self.VAE_loss)
