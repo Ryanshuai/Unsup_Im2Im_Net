@@ -307,7 +307,7 @@ class Image_translation_net(object):
         self.RC = self._generator_end(sRC, 'generator_A') #RA_(RB_A)
         self.RD = self._generator_end(sRD, 'generator_B') #RB_(RA_B)
 
-        with tf.name_scope('gan_loss'):
+        with tf.name_scope('EG_loss'):
             #VAE_loss
             KL_lossA = 0.5 * tf.reduce_sum(tf.square(self.muA) + tf.square(self.sigmaA) - tf.log(1e-8 + tf.square(self.sigmaA)) - 1, [1])# [BS,z_dim]->[BS,1]
             IO_lossA = tf.reduce_sum(np.abs(XA_32 - self.RA_A), [1, 2, 3])# [BS,w,h,c]->[BS,1]
@@ -342,33 +342,30 @@ class Image_translation_net(object):
             self.Cycle_loss = Cycle_lossA + Cycle_lossB
 
             #loss
-            self.gan_total_loss = self.VAE_loss + self.GAN_loss + self.Cycle_loss # [1]
+            self.EG_loss = self.VAE_loss + self.GAN_loss + self.Cycle_loss # [1]
 
 
-        with tf.name_scope('dis_loss'):
-            DIS_loss_Areal = tf.reduce_mean(
-                tf.nn.sigmoid_cross_entropy_with_logits(logits=XA_32, labels=tf.ones_like(XA_32)))  # real
-            DIS_loss_Afake = tf.reduce_mean(
-                tf.nn.sigmoid_cross_entropy_with_logits(logits=yA_B, labels=tf.zeros_like(yA_B)))  # fake
+        with tf.name_scope('D_loss'):
+            DIS_loss_Areal = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=XA_32, labels=tf.ones_like(XA_32)))  # real
+            DIS_loss_Afake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=yA_B, labels=tf.zeros_like(yA_B)))  # fake
             DIS_lossA = DIS_loss_Areal + DIS_loss_Afake  # [1] #Optimize(EA,GA,DA)
 
-            DIS_loss_Breal = tf.reduce_mean(
-                tf.nn.sigmoid_cross_entropy_with_logits(logits=self.XB, labels=tf.ones_like(self.XB)))  # real
-            DIS_loss_Bfake = tf.reduce_mean(
-                tf.nn.sigmoid_cross_entropy_with_logits(logits=yB_A, labels=tf.zeros_like(yB_A)))  # fake
+            DIS_loss_Breal = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=self.XB, labels=tf.ones_like(self.XB)))  # real
+            DIS_loss_Bfake = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits=yB_A, labels=tf.zeros_like(yB_A)))  # fake
             DIS_lossB = DIS_loss_Breal + DIS_loss_Bfake  # [1] #Optimize(EB,GB,DB)
 
-            self.dis_total_loss = self.L0 * (DIS_lossA + DIS_lossB)  # [1]
+            self.D_loss = self.L0 * (DIS_lossA + DIS_lossB)  # [1]
 
         # optimizers
-        self.optimize_d = tf.train.AdamOptimizer(learning_rate=0.0001).minimize(self.dis_total_loss, var_list=self.d_variables)
-        self.optimize_ge = tf.train.AdamOptimizer(learning_rate=0.0001).minimize(self.gan_total_loss, var_list=[self.g_variables, self.e_variables])
+        self.optimize_EG = tf.train.AdamOptimizer(learning_rate=0.0001).minimize(self.EG_loss, var_list=[self.g_variables, self.e_variables])
+        self.optimize_D = tf.train.AdamOptimizer(learning_rate=0.0001).minimize(self.D_loss, var_list=self.d_variables)
 
         #tensorboard
-        self.sum_VAE_loss = tf.summary.scalar("VAE_loss", self.VAE_loss)
-        self.sum_GAN_loss = tf.summary.scalar("GAN_loss", self.GAN_loss)
-        self.sum_Cycle_loss = tf.summary.scalar("Cycle_loss", self.Cycle_loss)
-        self.sum_loss = tf.summary.scalar("loss", self.loss)
+        # self.sum_VAE_loss = tf.summary.scalar("VAE_loss", self.VAE_loss)
+        # self.sum_GAN_loss = tf.summary.scalar("GAN_loss", self.GAN_loss)
+        # self.sum_Cycle_loss = tf.summary.scalar("Cycle_loss", self.Cycle_loss)
+        self.sum_D_loss = tf.summary.scalar("D_loss", self.D_loss)
+        self.sum_EG_loss = tf.summary.scalar("EG_loss", self.EG_loss)
         self.sum_merge = tf.summary.merge_all()
 
 
@@ -403,11 +400,9 @@ class Image_translation_net(object):
                     XA, labelA = mnist.train.next_batch(self.BS)
                     XB, labelB = sess.run(svhn_iterator.get_next())
                     #train
-                    _, sum_merge, loss, VAE_loss, GAN_loss, Cycle_loss = sess.run(
-                        [self.optimize_d, self.sum_merge, self.loss, self.VAE_loss, self.GAN_loss, self.Cycle_loss],
+                    _, sum_merge, EG_loss = sess.run([self.optimize_EG, self.sum_merge, self.EG_loss],
                         feed_dict={self.XA: XA, self.XB: XB})
-                    _, sum_merge, loss, VAE_loss, GAN_loss, Cycle_loss = sess.run(
-                        [self.optimize_ge, self.sum_merge, self.loss, self.VAE_loss, self.GAN_loss, self.Cycle_loss],
+                    _, sum_merge, D_loss = sess.run([self.optimize_D, self.sum_merge, self.D_loss],
                         feed_dict={self.XA: XA, self.XB: XB})
 
                     if epoch_step % 10 == 0: # tensorboard
